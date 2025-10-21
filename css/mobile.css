@@ -1,0 +1,12 @@
+.border-start, .border-end {
+    border-color: white !important;
+}
+.c-width {
+    width: 100%;
+}
+.align-self-stretch {
+    align-self: center !important;
+}
+.margin-right {
+    border: 0;
+}

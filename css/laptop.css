@@ -1,0 +1,100 @@
+.avatar {
+    height: 150px;
+    position: absolute;
+    z-index: 10;
+    top: -55px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: solid white 8px;
+}
+.empty {
+    width: 426px;
+}
+.c-width {
+    width: 50%;
+}
+.box {
+  height: 390px;
+}
+.box li::before {
+  content: "";
+  position: absolute;
+  left:-25px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  background-color: #007bff;
+  border: 3px solid white;
+  border-radius: 50%;
+}
+ul {
+    list-style: none;
+}
+.box li {
+  position: relative;
+}
+.circle-icon {
+    width: 55px;
+    height: 55px;
+    border: 1px rgb(13, 110, 253) solid;
+}
+.progress-bar1 {
+  height: 5px;
+  width: 70px;
+  background-color: rgb(17, 146, 231);
+  border-radius: 3px;
+}
+.progress-bar2 {
+  height: 5px;
+  width: 70px;
+  background-color: rgb(230, 230, 230);
+  border-radius: 3px;
+}
+.background-color {
+  background-color: rgb(247, 247, 247);
+}
+.margin-bottom {
+  border-bottom: 1px solid #d6c08d;
+}
+.margin-right {
+  border-right: 1px solid #d6c08d;
+}
+/* Footer */
+footer {
+  background-color: rgb(230, 230, 230);
+  width: 100%;
+  height: 100px;
+}
+footer ul {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  padding-left: 0;
+}
+footer ul li {
+  display: flex;
+  width: 150px;
+  font-size: 25px;
+  color: rgb(150, 150, 150);
+  justify-content: center;
+}
+/* button */
+.btn {
+  width: 80px;
+}
+.button {
+  width: 120px;
+  background-color: rgb(233, 243, 97);
+  border: 0;
+}
+/* khác */
+.col:hover .button {
+  display: block !important;
+}
+.background-color {
+  height: 100%;
+}
+.card {
+  min-height: 94px;
+}
