@@ -513,13 +513,13 @@ button.nav-link{border:0;background:transparent}
 .student-chip-text{min-width:0;flex:1}.student-chip-text strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.student-chip-text small{font-size:10px;color:var(--muted)}
 .classroom-panel{min-height:600px;padding:24px;overflow:hidden}
 .classroom-front{margin:0 auto 32px;width:min(430px,90%);padding:11px;text-align:center;border:1px solid var(--line-strong);border-radius:12px;background:linear-gradient(100deg,rgba(0,127,187,.1),rgba(90,77,232,.1));font-size:11px;font-weight:800;letter-spacing:1.8px;color:var(--primary)}
-.groups-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.groups-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
 .groups-grid>.data-state{grid-column:1/-1;min-height:420px}
-.group-card{border:1px solid var(--line);border-radius:18px;padding:14px;background:rgba(127,160,195,.035)}
+.group-card{border:1px solid var(--line);border-radius:18px;padding:12px;background:rgba(127,160,195,.035)}
 .group-label{display:flex;align-items:center;justify-content:space-between;color:var(--text);font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;margin-bottom:12px}.group-label small{font-family:'Be Vietnam Pro',sans-serif;color:var(--muted);font-size:10px}
-.desks{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
-.desk{min-width:0;border:1px solid var(--line);border-radius:11px;padding:5px;background:var(--bg-soft);position:relative}.desk:before{content:attr(data-desk);position:absolute;right:5px;top:3px;color:var(--muted);font-size:8px;font-weight:800}
-.seat{min-height:72px;display:flex;align-items:center;justify-content:center;text-align:center;border-radius:8px;font-size:10px;font-weight:700;padding:4px;word-break:break-word;cursor:pointer;transition:.2s ease}.seat:first-child{border-bottom:1px dashed var(--line)}
+.desks{display:grid;grid-template-columns:1fr;gap:8px}
+.desk{min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:11px;padding:18px 5px 5px;background:var(--bg-soft);position:relative}.desk:before{content:attr(data-desk);position:absolute;left:6px;top:3px;color:var(--muted);font-size:8px;font-weight:800}
+.seat{min-height:58px;display:flex;align-items:center;justify-content:center;text-align:center;border-radius:8px;font-size:10px;font-weight:700;padding:4px;word-break:break-word;cursor:pointer;transition:.2s ease}.seat:first-child{border-right:1px dashed var(--line)}
 .seat.empty{color:var(--muted);font-weight:500}.seat.drag-over{outline:2px solid var(--primary);background:rgba(0,127,187,.11)}.seat .student-avatar{width:23px;height:23px;border-radius:7px;font-size:8px;margin:0 auto 3px}.seat-name{display:block;line-height:1.25}
 .admin-seat-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:22px}.seat-touch-note{font-size:10px;color:var(--muted);margin-right:auto}.seat-touch-note i{color:var(--primary)}
 .score-button{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:8px;width:27px;height:27px;font-weight:800;transition:.2s}.score-button.plus:hover{color:var(--green);border-color:var(--green)}.score-button.minus:hover{color:var(--red);border-color:var(--red)}
@@ -573,7 +573,7 @@ button.nav-link{border:0;background:transparent}
   .class-card{margin-top:4px}
   .chart-wrap{height:280px}
   .donut-layout{grid-template-columns:150px 1fr}
-  .seating-layout{grid-template-columns:1fr}.roster-panel{position:static;max-height:none}.student-roster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .seating-layout{grid-template-columns:1fr}.roster-panel{position:static;max-height:none}.student-roster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.groups-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 @media (max-width:767.98px){

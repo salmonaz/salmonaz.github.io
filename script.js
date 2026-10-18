@@ -38,6 +38,7 @@ function escapeHtml(input) { return String(input ?? "").replace(/[&<>"']/g, char
 function formatNumber(value) { return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(Number(value || 0)); }
 function initials(name) { return String(name || "?").trim().split(/\s+/).slice(-2).map(part => part[0]).join("").toUpperCase(); }
 function monthNow() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; }
+function normalizeSearchText(value) { return String(value || "").toLocaleLowerCase("vi").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d"); }
 
 /* Theme */
 function syncTheme() {
@@ -228,7 +229,7 @@ function autoSeat() { const seats = Array.from({ length: 4 }, (_, g) => Array.fr
 $("saveSeatsBtn").addEventListener("click", saveSeating); $("autoSeatBtn").addEventListener("click", autoSeat);
 
 function renderLeaderboard() {
-  const term = $("studentSearch").value.trim().toLocaleLowerCase("vi"); const rows = state.leaderboard.filter(student => student.fullName.toLocaleLowerCase("vi").includes(term));
+  const term = normalizeSearchText($("studentSearch").value.trim()); const rows = state.leaderboard.filter(student => normalizeSearchText(student.fullName).includes(term));
   $("leaderboardInfo").textContent = `${state.leaderboard.length} học sinh · điểm được tính từ các lượt cộng/trừ đã lưu.`;
   $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr><td><strong>${student.rank}</strong></td><td><button class="student-chip p-0" data-student-id="${student.id}">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo}` : "Chưa phân tổ"}</small></span></button></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${student.total > 0 ? "positive" : student.total < 0 ? "negative" : ""}">${student.total > 0 ? "+" : ""}${formatNumber(student.total)}</strong></td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="5">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
   document.querySelectorAll("#leaderboardRows [data-student-id]").forEach(item => item.addEventListener("click", event => { const button = event.target.closest("[data-student-id]"); if (!button) return; if (button.dataset.score) { changeScore(button.dataset.studentId, button.dataset.score === "plus" ? 1 : -1); } else openStudent(button.dataset.studentId); }));
