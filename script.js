@@ -17,6 +17,8 @@ const SCHOOL_API = Object.freeze({
 
 const $ = id => document.getElementById(id);
 const root = document.documentElement;
+const GROUP_NUMBERS = Object.freeze([1, 2, 3, 4]);
+const defaultGroupLayout = () => ({ 1: 1, 2: 2, 3: 3, 4: 4 });
 const state = {
   chart: null,
   records: [],
@@ -30,6 +32,7 @@ const state = {
   schoolEventsByStudent: new Map(),
   unmatchedSchoolRecords: [],
   seating: {},
+  groupLayout: defaultGroupLayout(),
   adminToken: sessionStorage.getItem("11tin-admin-token") || "",
   adminExpiresAt: Number(sessionStorage.getItem("11tin-admin-expires-at") || 0),
   seatMonth: monthNow(),
@@ -56,6 +59,16 @@ function formatNumber(value) { return new Intl.NumberFormat("vi-VN", { maximumFr
 function initials(name) { return String(name || "?").trim().split(/\s+/).slice(-2).map(part => part[0]).join("").toUpperCase(); }
 function monthNow() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; }
 function normalizeSearchText(value) { return String(value || "").toLocaleLowerCase("vi").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d"); }
+function groupLayoutOrDefault(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return defaultGroupLayout();
+  const layout = {};
+  for (const position of GROUP_NUMBERS) {
+    const group = Number(input[position]);
+    if (!GROUP_NUMBERS.includes(group)) return defaultGroupLayout();
+    layout[position] = group;
+  }
+  return new Set(Object.values(layout)).size === GROUP_NUMBERS.length ? layout : defaultGroupLayout();
+}
 
 /* Theme */
 function syncTheme() {
@@ -346,7 +359,9 @@ async function api(path, options = {}) {
 }
 function setBackendProblem(show) { $("backendAlert").classList.toggle("d-none", !show); }
 function setAdminUI() {
-  const admin = isAdmin(); document.querySelectorAll(".admin-only").forEach(item => item.classList.toggle("d-none", !admin));
+  const admin = isAdmin();
+  document.querySelectorAll(".admin-only").forEach(item => item.classList.toggle("d-none", !admin));
+  $("seatingLayout")?.classList.toggle("public-seating", !admin);
 }
 async function logoutAdmin() {
   if (state.seatingDirty) {
@@ -366,7 +381,7 @@ async function logoutAdmin() {
 async function loadClassData() {
   try {
     const [studentsPayload, seatingPayload, boardPayload] = await Promise.all([api("/students"), api(`/seating?month=${encodeURIComponent(state.seatMonth)}`), api("/leaderboard")]);
-    state.students = studentsPayload.students || []; state.seating = seatingPayload.assignments || {}; state.manualLeaderboard = boardPayload.students || [];
+    state.students = studentsPayload.students || []; state.seating = seatingPayload.assignments || {}; state.groupLayout = groupLayoutOrDefault(seatingPayload.groupLayout); state.manualLeaderboard = boardPayload.students || [];
     refreshLeaderboard(); setBackendProblem(false); renderSeating(); renderLeaderboard(); setAdminUI();
   } catch (error) { console.error(error); setBackendProblem(true); $("unseatedRoster").innerHTML = emptyState("Chưa thể tải dữ liệu lớp."); $("groupsGrid").innerHTML = emptyState("Chưa thể tải sơ đồ chỗ ngồi."); $("leaderboardRows").innerHTML = `<tr><td colspan="5">${emptyState("Chưa thể tải thi đua cá nhân.")}</td></tr>`; }
 }
@@ -378,7 +393,8 @@ function groupForSeatId(value) {
   const match = /^g([1-4])-d[1-5]-s[1-2]$/.exec(String(value || ""));
   return match ? Number(match[1]) : null;
 }
-function groupSeatIds(group) { return Array.from({ length: 5 }, (_, desk) => [seatId(group, desk + 1, 1), seatId(group, desk + 1, 2)]).flat(); }
+function groupAtPosition(position) { return state.groupLayout[position] || position; }
+function positionForGroup(group) { return GROUP_NUMBERS.find(position => groupAtPosition(position) === group) || group; }
 function studentGroupLabel(student) { return student.groupNo ? `Tổ ${student.groupNo}` : isAdmin() ? "Chưa phân tổ" : ""; }
 function syncGroupsFromSeating() {
   const groupsByStudent = new Map();
@@ -392,21 +408,16 @@ function syncGroupsFromSeating() {
   refreshLeaderboard();
 }
 function swapGroupPositions(sourceGroup, targetGroup) {
-  if (sourceGroup === targetGroup || ![1, 2, 3, 4].includes(sourceGroup) || ![1, 2, 3, 4].includes(targetGroup)) return;
-  const nextSeating = { ...state.seating };
-  groupSeatIds(sourceGroup).forEach((sourceSeat, index) => {
-    const targetSeat = groupSeatIds(targetGroup)[index];
-    const sourceStudent = nextSeating[sourceSeat];
-    const targetStudent = nextSeating[targetSeat];
-    if (targetStudent) nextSeating[sourceSeat] = targetStudent;
-    else delete nextSeating[sourceSeat];
-    if (sourceStudent) nextSeating[targetSeat] = sourceStudent;
-    else delete nextSeating[targetSeat];
-  });
-  state.seating = nextSeating;
+  if (sourceGroup === targetGroup || !GROUP_NUMBERS.includes(sourceGroup) || !GROUP_NUMBERS.includes(targetGroup)) return;
+  const sourcePosition = positionForGroup(sourceGroup);
+  const targetPosition = positionForGroup(targetGroup);
+  state.groupLayout = {
+    ...state.groupLayout,
+    [sourcePosition]: targetGroup,
+    [targetPosition]: sourceGroup
+  };
   state.selectedStudentId = null;
   state.selectedGroupNo = null;
-  syncGroupsFromSeating();
   markSeatingDirty();
   renderSeating();
 }
@@ -418,10 +429,11 @@ function renderSeating() {
   $("rosterTitle").textContent = term ? "Kết quả tìm" : "Chưa xếp chỗ";
   $("unseatedCount").textContent = `${visibleStudents.length} HS`;
   $("unseatedRoster").innerHTML = visibleStudents.length ? visibleStudents.map(studentChip).join("") : term ? emptyState("Không tìm thấy học sinh phù hợp.") : `<div class="data-state"><i class="bi bi-check-circle"></i><strong>Đã xếp đủ chỗ.</strong><span>Toàn bộ học sinh đang ở trên sơ đồ.</span></div>`;
-  $("groupsGrid").innerHTML = [1, 2, 3, 4].map(group => {
+  $("groupsGrid").innerHTML = GROUP_NUMBERS.map(position => {
+    const group = groupAtPosition(position);
     const selected = state.selectedGroupNo === group;
     const title = isAdmin() ? `<button class="group-drag-handle ${selected ? "is-selected" : ""}" type="button" data-group-drag="${group}" draggable="true" aria-pressed="${selected}" aria-label="Đổi vị trí Tổ ${group}" title="Kéo hoặc chạm để đổi vị trí tổ"><i class="bi bi-grip-vertical"></i><span>Tổ ${group}</span></button>` : `<span>Tổ ${group}</span>`;
-    return `<section class="group-card ${selected ? "is-group-selected" : ""}" data-group-target="${group}"><div class="group-label">${title}<small>5 bàn · 10 chỗ</small></div><div class="desks">${Array.from({ length: 5 }, (_, deskIndex) => { const desk = deskIndex + 1; return `<div class="desk" data-desk="B${desk}"><div class="seat ${state.seating[seatId(group, desk, 1)] ? "" : "empty"}" data-seat-id="${seatId(group, desk, 1)}">${seatContent(state.seating[seatId(group, desk, 1)])}</div><div class="seat ${state.seating[seatId(group, desk, 2)] ? "" : "empty"}" data-seat-id="${seatId(group, desk, 2)}">${seatContent(state.seating[seatId(group, desk, 2)])}</div></div>`; }).join("")}</div></section>`;
+    return `<section class="group-card ${selected ? "is-group-selected" : ""}" data-group-target="${group}" data-group-position="${position}"><div class="group-label">${title}<small>5 bàn · 10 chỗ</small></div><div class="desks">${Array.from({ length: 5 }, (_, deskIndex) => { const desk = deskIndex + 1; return `<div class="desk" data-desk="B${desk}"><div class="seat ${state.seating[seatId(group, desk, 1)] ? "" : "empty"}" data-seat-id="${seatId(group, desk, 1)}">${seatContent(state.seating[seatId(group, desk, 1)])}</div><div class="seat ${state.seating[seatId(group, desk, 2)] ? "" : "empty"}" data-seat-id="${seatId(group, desk, 2)}">${seatContent(state.seating[seatId(group, desk, 2)])}</div></div>`; }).join("")}</div></section>`;
   }).join("");
   bindSeatingEvents();
 }
@@ -518,7 +530,7 @@ function bindSeatingEvents() {
     });
   });
 }
-async function saveSeating() { try { await api("/admin/seating", { method: "PUT", body: JSON.stringify({ month: state.seatMonth, assignments: state.seating }) }); state.seatingDirty = false; $("saveSeatsBtn").innerHTML = '<i class="bi bi-check-lg me-1"></i>Đã lưu'; return true; } catch (error) { alert(error.message); return false; } }
+async function saveSeating() { try { await api("/admin/seating", { method: "PUT", body: JSON.stringify({ month: state.seatMonth, assignments: state.seating, groupLayout: state.groupLayout }) }); state.seatingDirty = false; $("saveSeatsBtn").innerHTML = '<i class="bi bi-check-lg me-1"></i>Đã lưu'; return true; } catch (error) { alert(error.message); return false; } }
 function autoSeat() { const seats = Array.from({ length: 4 }, (_, g) => Array.from({ length: 5 }, (_, d) => [seatId(g + 1, d + 1, 1), seatId(g + 1, d + 1, 2)])).flat(2); state.seating = {}; state.students.slice().sort((a, b) => a.fullName.localeCompare(b.fullName, "vi")).forEach((student, index) => { if (seats[index]) state.seating[seats[index]] = student.id; }); state.selectedStudentId = null; state.selectedGroupNo = null; syncGroupsFromSeating(); markSeatingDirty(); renderSeating(); }
 $("saveSeatsBtn").addEventListener("click", saveSeating);
 $("autoSeatBtn").addEventListener("click", autoSeat);
@@ -636,7 +648,7 @@ function openStudent(studentId) {
   state.activeStudentId = studentId;
   const score = leaderboardStudent(studentId); const total = studentScore(studentId);
   const groupLabel = studentGroupLabel(student);
-  const adminTools = isAdmin() ? `<section class="student-score-tools"><div><strong>Điểm thủ công</strong><small>Cộng/trừ là điều chỉnh riêng; ghi đè thay toàn bộ điểm hiển thị.</small></div><div class="student-score-tool-buttons"><button class="period-btn" type="button" id="manualPlusBtn"><i class="bi bi-plus-lg me-1"></i>Cộng điểm</button><button class="period-btn" type="button" id="manualMinusBtn"><i class="bi bi-dash-lg me-1"></i>Trừ điểm</button><button class="period-btn" type="button" id="setScoreOverrideBtn"><i class="bi bi-pencil-square me-1"></i>Ghi đè điểm</button>${score?.overrideTotal !== null && score?.overrideTotal !== undefined ? `<button class="period-btn" type="button" id="clearScoreOverrideBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ ghi đè</button>` : ""}<button class="period-btn danger-outline" type="button" id="resetScoreBtn"><i class="bi bi-arrow-repeat me-1"></i>Đặt lại theo trường</button></div></section><div class="student-detail-actions"><label>Họ và tên<input id="studentNameInput" value="${escapeHtml(student.fullName)}" maxlength="100"></label><label>Tên trên nguồn trường<input id="schoolNameInput" value="${escapeHtml(student.schoolName || student.fullName)}" maxlength="100"></label><label>Tổ<select id="groupSelect"><option value="">Chưa phân tổ</option>${[1, 2, 3, 4].map(group => `<option value="${group}" ${Number(student.groupNo) === group ? "selected" : ""}>Tổ ${group}</option>`).join("")}</select></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn"><i class="bi bi-image me-1"></i>Chọn ảnh<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
+  const adminTools = isAdmin() ? `<section class="student-score-tools"><div><strong>Điểm thủ công</strong><small>Cộng/trừ là điều chỉnh riêng; ghi đè thay toàn bộ điểm hiển thị.</small></div><div class="student-score-tool-buttons"><button class="period-btn" type="button" id="manualPlusBtn"><i class="bi bi-plus-lg me-1"></i>Cộng điểm</button><button class="period-btn" type="button" id="manualMinusBtn"><i class="bi bi-dash-lg me-1"></i>Trừ điểm</button><button class="period-btn" type="button" id="setScoreOverrideBtn"><i class="bi bi-pencil-square me-1"></i>Ghi đè điểm</button>${score?.overrideTotal !== null && score?.overrideTotal !== undefined ? `<button class="period-btn" type="button" id="clearScoreOverrideBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ ghi đè</button>` : ""}<button class="period-btn danger-outline" type="button" id="resetScoreBtn"><i class="bi bi-arrow-repeat me-1"></i>Đặt lại theo trường</button></div></section><div class="student-detail-actions"><label>Họ và tên<input id="studentNameInput" value="${escapeHtml(student.fullName)}" maxlength="100"></label><label>Tên trên nguồn trường<input id="schoolNameInput" value="${escapeHtml(student.schoolName || student.fullName)}" maxlength="100"></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn"><i class="bi bi-image me-1"></i>Chọn ảnh<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
   $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p>${groupLabel ? `${escapeHtml(groupLabel)} · ` : ""}<strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></p>${scoreSummaryMarkup(score)}</div>${adminTools}</div>`;
   const dialog = $("studentDialog");
   if (!dialog.open) dialog.showModal();
@@ -650,7 +662,7 @@ function bindStudentDialog() {
   $("setScoreOverrideBtn")?.addEventListener("click", () => setScoreOverride(state.activeStudentId));
   $("clearScoreOverrideBtn")?.addEventListener("click", () => clearScoreOverride(state.activeStudentId));
   $("resetScoreBtn")?.addEventListener("click", () => resetScoreToSchool(state.activeStudentId));
-  $("saveStudentBtn")?.addEventListener("click", async () => { try { await api(`/admin/students/${state.activeStudentId}`, { method: "PATCH", body: JSON.stringify({ fullName: $("studentNameInput").value, schoolName: $("schoolNameInput").value, groupNo: $("groupSelect").value || null }) }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
+  $("saveStudentBtn")?.addEventListener("click", async () => { try { await api(`/admin/students/${state.activeStudentId}`, { method: "PATCH", body: JSON.stringify({ fullName: $("studentNameInput").value, schoolName: $("schoolNameInput").value }) }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("photoInput")?.addEventListener("change", async event => { const file = event.target.files[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) return alert("Ảnh không được vượt quá 5 MB."); const form = new FormData(); form.append("photo", file); try { await api(`/admin/students/${state.activeStudentId}/photo`, { method: "POST", body: form }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("deletePhotoBtn")?.addEventListener("click", async () => { if (!confirm("Xóa ảnh của học sinh này?")) return; try { await api(`/admin/students/${state.activeStudentId}/photo`, { method: "DELETE" }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("deleteStudentBtn")?.addEventListener("click", async () => { const student = findStudent(state.activeStudentId); if (!student || !confirm(`Xóa ${student.fullName} khỏi danh sách lớp?`)) return; try { await api(`/admin/students/${state.activeStudentId}`, { method: "DELETE" }); $("studentDialog").close(); state.activeStudentId = null; await loadClassData(); } catch (error) { alert(error.message); } });

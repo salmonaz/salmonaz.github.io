@@ -13,6 +13,67 @@ const fromB64url = value => Uint8Array.from(
   atob(value.replaceAll("-", "+").replaceAll("_", "/") + "===".slice((value.length + 3) % 4)),
   char => char.charCodeAt(0)
 );
+const GROUP_POSITIONS = [1, 2, 3, 4];
+let seatingGroupLayoutReady;
+
+function defaultGroupLayout() {
+  return Object.fromEntries(GROUP_POSITIONS.map(position => [position, position]));
+}
+
+function normalizeGroupLayout(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const keys = Object.keys(value);
+  if (keys.length !== GROUP_POSITIONS.length || keys.some(key => !GROUP_POSITIONS.includes(Number(key)))) return null;
+
+  const layout = {};
+  for (const position of GROUP_POSITIONS) {
+    const groupNo = value[position];
+    if (!Number.isInteger(groupNo) || !GROUP_POSITIONS.includes(groupNo)) return null;
+    layout[position] = groupNo;
+  }
+  return new Set(Object.values(layout)).size === GROUP_POSITIONS.length ? layout : null;
+}
+
+function ensureSeatingGroupLayoutTable(env) {
+  if (!seatingGroupLayoutReady) {
+    seatingGroupLayoutReady = env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS seating_group_layout (
+        seat_month TEXT NOT NULL,
+        position_no INTEGER NOT NULL CHECK (position_no BETWEEN 1 AND 4),
+        group_no INTEGER NOT NULL CHECK (group_no BETWEEN 1 AND 4),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (seat_month, position_no),
+        UNIQUE (seat_month, group_no)
+      )
+    `).run().catch(error => {
+      seatingGroupLayoutReady = null;
+      throw error;
+    });
+  }
+  return seatingGroupLayoutReady;
+}
+
+function layoutFromRows(rows) {
+  const layout = {};
+  for (const row of rows) {
+    const position = Number(row.position_no);
+    const groupNo = Number(row.group_no);
+    if (!GROUP_POSITIONS.includes(position) || !GROUP_POSITIONS.includes(groupNo) || layout[position] !== undefined) {
+      return defaultGroupLayout();
+    }
+    layout[position] = groupNo;
+  }
+  return normalizeGroupLayout(layout) || defaultGroupLayout();
+}
+
+async function getGroupLayout(env, month) {
+  await ensureSeatingGroupLayoutTable(env);
+  const { results } = await env.DB
+    .prepare("SELECT position_no, group_no FROM seating_group_layout WHERE seat_month = ?")
+    .bind(month)
+    .all();
+  return layoutFromRows(results);
+}
 
 function safeEqual(a, b) {
   const first = encoder.encode(String(a || ""));
@@ -94,11 +155,16 @@ async function publicHandler(request, env, path) {
   if (request.method === "GET" && path[0] === "seating") {
     const month = new URL(request.url).searchParams.get("month");
     if (!/^\d{4}-\d{2}$/.test(month || "")) return fail("Tháng không hợp lệ.");
-    const { results } = await env.DB
-      .prepare("SELECT seat_id, student_id FROM seating WHERE seat_month = ?")
-      .bind(month)
-      .all();
-    return json({ month, assignments: Object.fromEntries(results.map(row => [row.seat_id, row.student_id])) });
+    await ensureSeatingGroupLayoutTable(env);
+    const [seatingRows, layoutRows] = await Promise.all([
+      env.DB.prepare("SELECT seat_id, student_id FROM seating WHERE seat_month = ?").bind(month).all(),
+      env.DB.prepare("SELECT position_no, group_no FROM seating_group_layout WHERE seat_month = ?").bind(month).all()
+    ]);
+    return json({
+      month,
+      assignments: Object.fromEntries(seatingRows.results.map(row => [row.seat_id, row.student_id])),
+      groupLayout: layoutFromRows(layoutRows.results)
+    });
   }
 
   if (request.method === "GET" && path[0] === "leaderboard") {
@@ -195,12 +261,21 @@ async function adminHandler(request, env, path) {
     if (new Set(ids).size !== ids.length) return fail("Một học sinh không thể ngồi ở hai chỗ.");
     if (!await validateStudentIds(env, ids)) return fail("Có học sinh không thuộc danh sách lớp.");
 
+    await ensureSeatingGroupLayoutTable(env);
+    const hasGroupLayout = Object.prototype.hasOwnProperty.call(body, "groupLayout");
+    const groupLayout = hasGroupLayout ? normalizeGroupLayout(body.groupLayout) : await getGroupLayout(env, body.month);
+    if (!groupLayout) return fail("Bố trí tổ không hợp lệ.");
+
     const now = new Date().toISOString();
     const statements = [
       env.DB.prepare("DELETE FROM seating WHERE seat_month = ?").bind(body.month),
+      env.DB.prepare("DELETE FROM seating_group_layout WHERE seat_month = ?").bind(body.month),
       ...rows.map(({ seat, studentId }) => env.DB
         .prepare("INSERT INTO seating (seat_month, seat_id, student_id, updated_at) VALUES (?, ?, ?, ?)")
         .bind(body.month, seat, studentId, now)),
+      ...GROUP_POSITIONS.map(position => env.DB
+        .prepare("INSERT INTO seating_group_layout (seat_month, position_no, group_no, updated_at) VALUES (?, ?, ?, ?)")
+        .bind(body.month, position, groupLayout[position], now)),
       ...[1, 2, 3, 4].flatMap(groupNo => {
         const memberIds = rows.filter(row => row.groupNo === groupNo).map(row => row.studentId);
         if (!memberIds.length) return [];

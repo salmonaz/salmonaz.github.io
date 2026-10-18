@@ -519,7 +519,7 @@ button.nav-link{border:0;background:transparent}
 .admin-indicator{font-size:11px;font-weight:800;letter-spacing:.7px;padding:8px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);white-space:nowrap}
 .admin-indicator.is-admin{color:var(--green);border-color:rgba(17,159,103,.28);background:rgba(17,159,103,.08)}
 .backend-alert{border:1px solid rgba(197,139,0,.26);background:rgba(255,209,102,.1);color:var(--yellow);border-radius:14px;padding:12px 14px;display:flex;gap:9px;align-items:flex-start;font-size:13px;margin:-8px 0 18px}
-.seating-layout{display:grid;grid-template-columns:minmax(230px,280px) 1fr;gap:24px;align-items:start}
+.seating-layout{display:grid;grid-template-columns:minmax(230px,280px) 1fr;gap:24px;align-items:start}.seating-layout.public-seating{grid-template-columns:1fr}
 .roster-panel{position:sticky;top:98px;height:calc(100dvh - 120px);max-height:720px;padding:20px;display:flex;flex-direction:column;overflow:hidden}
 .roster-panel>.panel-head{flex:0 0 auto}
 .seating-search{width:100%;min-width:0;height:38px;flex:0 0 auto;margin:4px 0 12px}

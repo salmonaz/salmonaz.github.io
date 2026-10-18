@@ -16,6 +16,15 @@ CREATE TABLE IF NOT EXISTS seating (
   UNIQUE (seat_month, student_id)
 );
 
+CREATE TABLE IF NOT EXISTS seating_group_layout (
+  seat_month TEXT NOT NULL,
+  position_no INTEGER NOT NULL CHECK (position_no BETWEEN 1 AND 4),
+  group_no INTEGER NOT NULL CHECK (group_no BETWEEN 1 AND 4),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (seat_month, position_no),
+  UNIQUE (seat_month, group_no)
+);
+
 CREATE TABLE IF NOT EXISTS score_events (
   id TEXT PRIMARY KEY,
   student_id TEXT NOT NULL REFERENCES students(id),
@@ -32,6 +41,7 @@ CREATE TABLE IF NOT EXISTS student_score_overrides (
 );
 
 CREATE INDEX IF NOT EXISTS idx_seating_month ON seating(seat_month);
+CREATE INDEX IF NOT EXISTS idx_seating_group_layout_month ON seating_group_layout(seat_month);
 CREATE INDEX IF NOT EXISTS idx_score_events_student ON score_events(student_id);
 CREATE INDEX IF NOT EXISTS idx_student_score_overrides_student ON student_score_overrides(student_id);
 
