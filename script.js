@@ -622,7 +622,7 @@ function scoreSummaryMarkup(score) {
   const sourceScore = sourceReady ? `<strong class="${scoreClass(score.schoolTotal)}">${signedScore(score.schoolTotal)}</strong>` : "<strong>—</strong>";
   const sourceNote = sourceReady ? "" : `<div class="student-score-source-note">${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường; chưa thể xếp hạng." : "Đang đồng bộ điểm từ trường; xếp hạng sẽ xuất hiện khi hoàn tất."}</div>`;
   const manualScore = hasManualAdjustment(score.manualTotal) ? `<span><small>Điều chỉnh</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>` : "";
-  return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Điểm trường</small>${sourceScore}</span>${manualScore}${score.overrideTotal !== null ? `<span><small>Điểm ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
+  return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Điểm</small>${sourceScore}</span>${manualScore}${score.overrideTotal !== null ? `<span><small>Điểm ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
 }
 async function setScoreOverride(studentId) {
   const score = leaderboardStudent(studentId); const raw = prompt("Nhập điểm cuối muốn ghi đè (có thể âm hoặc bằng 0):", String(score?.overrideTotal ?? score?.total ?? 0));
