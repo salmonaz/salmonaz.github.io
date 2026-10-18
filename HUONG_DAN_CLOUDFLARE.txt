@@ -57,7 +57,16 @@ một lần khi khởi tạo database mới. Sau đó quản lý danh sách tr�
 PHẦN C — TẠO CLOUDFLARE PAGES
 ------------------------------
 
+LƯU Ý QUAN TRỌNG:
+Nếu bạn thấy dòng "Configure your Worker project and deploy it to Cloudflare",
+ô "Deploy command" có sẵn "npx wrangler deploy" hoặc phần "API token", bạn đang
+ở nhánh Worker Builds. Nhấn Back; không nhập API token và không nhấn Deploy ở màn
+hình đó. Project này dùng Pages Functions, không dùng Worker Builds.
+
 1. Vào Workers & Pages > Create application > Pages > Connect to Git.
+   Nếu màn hình đầu chỉ hiện "Import a repository", hãy tìm tab hoặc lựa chọn
+   "Pages" rồi chọn "Import an existing Git repository". Không chọn mục import
+   repository thuộc phần Workers.
 2. Kết nối GitHub nếu Cloudflare hỏi, rồi chọn repository:
    salmonaz/salmonaz.github.io
 3. Chọn branch production: main.
@@ -67,6 +76,9 @@ PHẦN C — TẠO CLOUDFLARE PAGES
    Build command: exit 0
    Build output directory: .
    Root directory: để trống
+
+   Nếu có lựa chọn "Enable Preview builds", có thể tắt để đơn giản.
+   Giữ "Protect with Cloudflare Access" ở trạng thái tắt.
 
 5. Nhấn Save and Deploy.
 6. Khi deploy xong, Cloudflare cấp một địa chỉ dạng:
