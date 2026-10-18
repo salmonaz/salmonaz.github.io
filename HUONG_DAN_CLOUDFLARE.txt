@@ -119,6 +119,12 @@ LƯU Ý KHI KIỂM TRA WEB
   công hoặc quản trị. Đó là GitHub Pages nên không có đường dẫn /api.
 - Nếu trang báo "Backend chưa có Secret quản trị", thực hiện ngay bước 3 bên
   dưới, rồi bước 5 để deploy lại.
+- KHÔNG thêm SECRET ở Settings > Build > Build Variables and Secrets hoặc ở
+  màn hình có Build command / Deploy command. Các giá trị đó chỉ có khi
+  Cloudflare đang build, backend /api không đọc được.
+- Hãy mở đúng Pages project có địa chỉ kết thúc bằng .pages.dev, vào Settings,
+  tìm phần Variables and Secrets ở cấp runtime. Nếu có công tắc môi trường,
+  công tắc phải là Production, không phải Previews Base / Preview.
 
 1. Vào Settings > Bindings > Add > D1 database binding.
    - Variable name: DB
@@ -182,9 +188,13 @@ Thay <URL-PAGES> bằng URL .pages.dev của bạn:
    - Nhấn "Lưu bố trí" trước khi rời trang.
    - Nhấn học sinh trong tab "Thi đua cá nhân" để sửa hồ sơ, thay ảnh hoặc xem
      lịch sử điểm từ trường và các điều chỉnh thủ công.
+   - Để thay ảnh: nhấn tên học sinh, nhấn "Chọn ảnh", rồi chọn tệp JPG, PNG
+     hoặc WebP không quá 5 MB. Ảnh tự tải lên sau khi chọn.
    - Dùng nút + / − để thêm điểm thủ công. Trong hồ sơ có thể ghi đè điểm cuối,
      bỏ ghi đè, hoặc "Đặt lại theo trường" để xóa toàn bộ điểm thủ công và chỉ
      dùng lại điểm từ trường.
+   - Sau khi đã nhấn "Lưu bố trí", dùng nút "Đăng xuất" trên thanh đầu trang
+     để kết thúc phiên quản trị.
 
 
 PHẦN F — SỬ DỤNG HẰNG NGÀY

@@ -123,6 +123,7 @@ a{text-decoration:none;color:inherit}
   transition:.25s ease;
 }
 .theme-toggle:hover{transform:rotate(-8deg) scale(1.05);border-color:rgba(85,214,255,.38)}
+.admin-logout{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(223,79,103,.26);border-radius:12px;padding:8px 11px;background:rgba(223,79,103,.06);color:var(--red);font-size:11px;font-weight:800;white-space:nowrap;transition:.2s ease}.admin-logout:hover{color:var(--red);background:rgba(223,79,103,.12);border-color:rgba(223,79,103,.48);transform:translateY(-1px)}
 
 .hero-section{
   position:relative;
@@ -618,7 +619,7 @@ button.nav-link{border:0;background:transparent}
   .activity-icon{width:34px;height:34px}
   .activity-top{flex-direction:column;gap:2px}
   .table-custom thead th,.table-custom tbody td{padding-left:9px;padding-right:9px}
-  .nav-actions{gap:0!important}.nav-link{font-size:0;padding:9px!important}.nav-link i{font-size:16px;margin:0!important}.page-section{padding-top:105px}.page-heading{align-items:flex-start;flex-direction:column;gap:15px}.groups-grid{grid-template-columns:1fr}.groups-grid>.data-state{min-height:300px}.desks{gap:5px}.seat{min-height:62px;font-size:9px}.classroom-panel{padding:15px}.student-roster{grid-template-columns:1fr}.student-detail{grid-template-columns:72px minmax(0,1fr)}.student-detail .student-avatar{width:72px;height:72px;border-radius:18px;font-size:24px}.student-score-tools{grid-template-columns:1fr}.student-score-tool-buttons{justify-content:flex-start}.dialog-card{width:100%;padding:24px 20px}
+  .nav-actions{gap:0!important}.nav-link{font-size:0;padding:9px!important}.nav-link i{font-size:16px;margin:0!important}.admin-logout{width:38px;height:38px;justify-content:center;padding:0;border-radius:12px}.admin-logout span{display:none}.page-section{padding-top:105px}.page-heading{align-items:flex-start;flex-direction:column;gap:15px}.groups-grid{grid-template-columns:1fr}.groups-grid>.data-state{min-height:300px}.desks{gap:5px}.seat{min-height:62px;font-size:9px}.classroom-panel{padding:15px}.student-roster{grid-template-columns:1fr}.student-detail{grid-template-columns:72px minmax(0,1fr)}.student-score-tools{grid-template-columns:1fr}.student-score-tool-buttons{justify-content:flex-start}.dialog-card{width:100%;padding:24px 20px}
 }
 
 @media (max-width:430px){

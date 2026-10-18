@@ -347,6 +347,19 @@ function setBackendProblem(show) { $("backendAlert").classList.toggle("d-none", 
 function setAdminUI() {
   const admin = isAdmin(); document.querySelectorAll(".admin-only").forEach(item => item.classList.toggle("d-none", !admin));
 }
+async function logoutAdmin() {
+  if (state.seatingDirty) {
+    const shouldSave = confirm("Bạn đã thay đổi sơ đồ chỗ ngồi. Nhấn OK để lưu rồi đăng xuất; nhấn Hủy để ở lại.");
+    if (!shouldSave || !await saveSeating()) return;
+  }
+  clearAdminSession();
+  state.selectedStudentId = null;
+  state.dragFromSeatId = null;
+  if ($("studentDialog").open) $("studentDialog").close();
+  setAdminUI();
+  renderSeating();
+  renderLeaderboard();
+}
 async function loadClassData() {
   try {
     const [studentsPayload, seatingPayload, boardPayload] = await Promise.all([api("/students"), api(`/seating?month=${encodeURIComponent(state.seatMonth)}`), api("/leaderboard")]);
@@ -417,7 +430,7 @@ function bindSeatingEvents() {
     });
   });
 }
-async function saveSeating() { try { await api("/admin/seating", { method: "PUT", body: JSON.stringify({ month: state.seatMonth, assignments: state.seating }) }); state.seatingDirty = false; $("saveSeatsBtn").innerHTML = '<i class="bi bi-check-lg me-1"></i>Đã lưu'; } catch (error) { alert(error.message); } }
+async function saveSeating() { try { await api("/admin/seating", { method: "PUT", body: JSON.stringify({ month: state.seatMonth, assignments: state.seating }) }); state.seatingDirty = false; $("saveSeatsBtn").innerHTML = '<i class="bi bi-check-lg me-1"></i>Đã lưu'; return true; } catch (error) { alert(error.message); return false; } }
 function autoSeat() { const seats = Array.from({ length: 4 }, (_, g) => Array.from({ length: 5 }, (_, d) => [seatId(g + 1, d + 1, 1), seatId(g + 1, d + 1, 2)])).flat(2); state.seating = {}; state.students.slice().sort((a, b) => a.fullName.localeCompare(b.fullName, "vi")).forEach((student, index) => { if (seats[index]) state.seating[seats[index]] = student.id; }); state.selectedStudentId = null; markSeatingDirty(); renderSeating(); }
 $("saveSeatsBtn").addEventListener("click", saveSeating); $("autoSeatBtn").addEventListener("click", autoSeat);
 
@@ -568,6 +581,7 @@ let triggerTimer;
 $("adminTriggerOne").addEventListener("click", () => { $("adminTriggerTwo").classList.remove("d-none"); clearTimeout(triggerTimer); triggerTimer = setTimeout(() => $("adminTriggerTwo").classList.add("d-none"), 6000); });
 $("adminTriggerTwo").addEventListener("click", () => { clearTimeout(triggerTimer); $("adminTriggerTwo").classList.add("d-none"); $("adminError").classList.add("d-none"); $("adminPassword").value = ""; $("adminDialog").showModal(); $("adminPassword").focus(); });
 $("closeAdminDialog").addEventListener("click", () => $("adminDialog").close());
+$("adminLogoutBtn").addEventListener("click", logoutAdmin);
 $("adminForm").addEventListener("submit", async event => { event.preventDefault(); const password = $("adminPassword").value; const error = $("adminError"); try { const session = await api("/admin/session", { method: "POST", body: JSON.stringify({ password }) }); state.adminToken = session.token; state.adminExpiresAt = Number(session.expiresAt) || 0; sessionStorage.setItem("11tin-admin-token", session.token); sessionStorage.setItem("11tin-admin-expires-at", String(state.adminExpiresAt)); $("adminDialog").close(); setAdminUI(); await loadClassData(); } catch (cause) { error.textContent = cause.message || "Không thể xác minh mật khẩu."; error.classList.remove("d-none"); } });
 $("adminDialog").addEventListener("close", () => { $("adminPassword").value = ""; });
 function closeDialogOnBackdrop(event) { if (event.target === event.currentTarget) event.currentTarget.close(); }
