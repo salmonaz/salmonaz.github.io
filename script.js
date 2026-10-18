@@ -15,6 +15,7 @@ const state = {
   manualLeaderboard: [],
   leaderboard: [],
   schoolRecordsState: "loading",
+  schoolLoadPromise: null,
   schoolEventsByStudent: new Map(),
   unmatchedSchoolRecords: [],
   seating: {},
@@ -61,7 +62,7 @@ function showView(name) {
   document.querySelectorAll(".app-tab").forEach(button => button.classList.toggle("active", button.dataset.viewTarget === name));
   if (name === "seating") state.seatMonth = monthNow();
   if (name === "seating" || name === "individual") loadClassData();
-  if (name === "individual") loadSchoolData(true);
+  if (name === "individual") loadSchoolData();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll("[data-view-target]").forEach(element => element.addEventListener("click", event => { event.preventDefault(); showView(element.dataset.viewTarget); }));
@@ -169,7 +170,7 @@ function refreshLeaderboard() {
   });
   let rank = 0; let previous;
   state.leaderboard = rows.map((student, index) => {
-    if (!hasNumericScore(student.total)) return { ...student, rank: null };
+    if (!sourceReady || !hasNumericScore(student.total)) return { ...student, rank: null };
     if (previous === undefined || student.total !== previous) rank = index + 1;
     previous = student.total;
     return { ...student, rank };
@@ -183,11 +184,59 @@ function renderSchoolRecords(records) {
 }
 function sourceStatus(name, message) { $("sourceStatus").textContent = name; $("updatedAt").innerHTML = `<i class="bi bi-clock-history"></i> ${message}`; }
 async function loadSchoolData(force = false) {
-  const hadSchoolData = schoolRecordsAvailable();
-  state.schoolRecordsState = hadSchoolData ? "refreshing" : "loading";
-  refreshLeaderboard();
-  try { sourceStatus("Đang tải", "Đang kết nối nguồn dữ liệu"); const cached = !force && getCachedSchoolData(); const data = cached || await getSchoolData(); if (!cached) cacheSchoolData(data); state.schoolRecordsState = "ready"; $("schoolYear").textContent = data.config.nienHoc || "Chưa xác định"; const hasEvents = Boolean(data.summary[SCHOOL_API.classId] && Object.keys(data.summary[SCHOOL_API.classId]).length); const updated = data.updatedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(data.updatedAt)) : "chưa có thời điểm"; sourceStatus(hasEvents ? "Đã đồng bộ" : "Chưa phát sinh điểm", `Cập nhật nguồn: ${updated}`); renderSchoolSummary(data); renderSchoolRecords(data.records); if (state.manualLeaderboard.length) renderLeaderboard(); }
-  catch (error) { console.error(error); state.schoolRecordsState = hadSchoolData ? "stale" : "error"; refreshLeaderboard(); sourceStatus("Lỗi tải dữ liệu", hadSchoolData ? "Không thể làm mới nguồn dữ liệu" : "Không thể kết nối nguồn dữ liệu"); $("rankList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại."); $("activityList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại."); $("chartState").className = "data-state"; $("chartState").innerHTML = emptyState("Không thể tải biểu đồ."); if (state.manualLeaderboard.length) renderLeaderboard(); }
+  if (state.schoolLoadPromise) return state.schoolLoadPromise;
+
+  const task = (async () => {
+    const hadSchoolData = schoolRecordsAvailable();
+    const cached = getCachedSchoolData();
+    state.schoolRecordsState = hadSchoolData ? "refreshing" : "loading";
+    refreshLeaderboard();
+
+    try {
+      sourceStatus("Đang tải", "Đang kết nối nguồn dữ liệu");
+      let data = !force ? cached : null;
+      let usingCachedData = Boolean(data);
+
+      if (!data) {
+        try {
+          data = await getSchoolData();
+          cacheSchoolData(data);
+        } catch (error) {
+          if (!cached) throw error;
+          console.warn("Không thể làm mới nguồn trường; dùng dữ liệu công khai đã lưu gần nhất.", error);
+          data = cached;
+          usingCachedData = true;
+          state.schoolRecordsState = "stale";
+        }
+      }
+
+      if (state.schoolRecordsState !== "stale") state.schoolRecordsState = "ready";
+      $("schoolYear").textContent = data.config.nienHoc || "Chưa xác định";
+      const hasEvents = Boolean(data.summary[SCHOOL_API.classId] && Object.keys(data.summary[SCHOOL_API.classId]).length);
+      const updated = data.updatedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(data.updatedAt)) : "chưa có thời điểm";
+      const label = state.schoolRecordsState === "stale" ? "Dữ liệu gần nhất" : hasEvents ? "Đã đồng bộ" : "Chưa phát sinh điểm";
+      const message = state.schoolRecordsState === "stale" ? `Chưa làm mới được nguồn; đang dùng bản công khai gần nhất: ${updated}` : `${usingCachedData ? "Bản đã lưu: " : "Cập nhật nguồn: "}${updated}`;
+      sourceStatus(label, message);
+      renderSchoolSummary(data);
+      renderSchoolRecords(data.records);
+      if (state.manualLeaderboard.length) renderLeaderboard();
+    } catch (error) {
+      console.error(error);
+      state.schoolRecordsState = hadSchoolData ? "stale" : "error";
+      refreshLeaderboard();
+      sourceStatus("Lỗi tải dữ liệu", hadSchoolData ? "Không thể làm mới nguồn; đang hiển thị dữ liệu gần nhất" : "Không thể kết nối nguồn dữ liệu");
+      if (!hadSchoolData) {
+        $("rankList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại.");
+        $("activityList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại.");
+        $("chartState").className = "data-state";
+        $("chartState").innerHTML = emptyState("Không thể tải biểu đồ.");
+      }
+      if (state.manualLeaderboard.length) renderLeaderboard();
+    }
+  })();
+
+  state.schoolLoadPromise = task.finally(() => { state.schoolLoadPromise = null; });
+  return state.schoolLoadPromise;
 }
 $("retryBtn").addEventListener("click", () => loadSchoolData(true));
 
@@ -362,8 +411,11 @@ async function loadScoreHistory(studentId) {
   }
 }
 function scoreSummaryMarkup(score) {
-  if (!score || !schoolRecordsAvailable()) return `<div class="student-score-summary pending"><span>${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường." : "Đang đồng bộ điểm từ trường…"}</span></div>`;
-  return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Trường</small><strong class="${scoreClass(score.schoolTotal)}">${signedScore(score.schoolTotal)}</strong></span><span><small>Thủ công</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>${score.overrideTotal !== null ? `<span><small>Ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>`;
+  if (!score) return `<div class="student-score-summary pending"><span>Đang đồng bộ điểm từ trường…</span></div>`;
+  const sourceReady = schoolRecordsAvailable();
+  const sourceScore = sourceReady ? `<strong class="${scoreClass(score.schoolTotal)}">${signedScore(score.schoolTotal)}</strong>` : "<strong>—</strong>";
+  const sourceNote = sourceReady ? "" : `<div class="student-score-source-note">${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường; chưa thể xếp hạng." : "Đang đồng bộ điểm từ trường; xếp hạng sẽ xuất hiện khi hoàn tất."}</div>`;
+  return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Trường</small>${sourceScore}</span><span><small>Thủ công</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>${score.overrideTotal !== null ? `<span><small>Ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
 }
 async function setScoreOverride(studentId) {
   const score = leaderboardStudent(studentId); const raw = prompt("Nhập điểm cuối muốn ghi đè (có thể âm hoặc bằng 0):", String(score?.overrideTotal ?? score?.total ?? 0));

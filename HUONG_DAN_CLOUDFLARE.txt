@@ -59,13 +59,14 @@ NÂNG CẤP DATABASE ĐÃ TẠO TRƯỚC ĐÓ
 ----------------------------------
 
 Nếu database 11tin-class-data đã được tạo bằng phiên bản cũ của website,
-sau khi Push phiên bản mới này hãy mở D1 Console và chạy TOÀN BỘ file:
+hãy mở D1 Console và chạy TOÀN BỘ file sau đây TRƯỚC KHI Push phiên bản mới này:
 
    migrations/0002_individual_score_overrides.sql
 
-Chỉ chạy file nâng cấp này MỘT LẦN. File tạo phần ghi đè điểm và tên liên kết
-với nguồn trường. Không chạy lại schema.sql cho database đã dùng vì schema.sql
-có danh sách học sinh khởi tạo.
+Chỉ chạy file nâng cấp này MỘT LẦN. Nếu đã Push trước khi đọc đến bước này,
+hãy chạy file ngay rồi vào Deployments > Retry deployment. File tạo phần ghi đè
+điểm và tên liên kết với nguồn trường. Không chạy lại schema.sql cho database
+đã dùng vì schema.sql có danh sách học sinh khởi tạo.
 
 Nếu bạn vừa tạo database mới ở bước 5 bên trên bằng schema.sql phiên bản mới,
 không cần chạy file nâng cấp này.
