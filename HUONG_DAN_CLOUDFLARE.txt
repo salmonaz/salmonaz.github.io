@@ -1,0 +1,182 @@
+11 TIN — HƯỚNG DẪN TRIỂN KHAI CLOUDFLARE (LÀM MỘT LẦN)
+================================================================
+
+Sau khi làm xong các bước dưới đây, không cần sửa code để dùng các chức năng:
+- Xem thi đua lớp 11 Tin từ nguồn công khai của trường.
+- Lưu sơ đồ chỗ ngồi theo từng tháng.
+- Kéo thả trên máy tính hoặc chạm tên rồi chạm ghế trên điện thoại.
+- Đăng / xóa ảnh, cộng / trừ điểm, xem và xóa từng lượt điểm.
+- Thêm, sửa tên hoặc xóa học sinh ngay trên website.
+
+Website phải chạy bằng Cloudflare Pages. URL GitHub Pages cũ chỉ chạy phần tĩnh,
+không chạy được backend /api.
+
+
+PHẦN A — ĐƯA PHIÊN BẢN HIỆN TẠI LÊN GITHUB
+---------------------------------------------
+
+Thư mục project cần dùng là:
+C:\Users\salmonaz\Desktop\salmonaz.github.io
+
+Repository đã được nối sẵn với:
+https://github.com/salmonaz/salmonaz.github.io
+
+Cách dễ nhất bằng GitHub Desktop:
+
+1. Mở GitHub Desktop.
+2. Chọn repository "salmonaz.github.io".
+3. Ở tab Changes, kiểm tra có các file mới như:
+   - functions/api/[[path]].js
+   - schema.sql
+   - _routes.json
+   - HUONG_DAN_CLOUDFLARE.txt
+4. Viết Summary, ví dụ: "Thêm backend quản lý lớp 11 Tin".
+5. Nhấn Commit to main, sau đó nhấn Push origin.
+
+Không cần sửa nội dung bất kỳ file nào trong bước này.
+
+
+PHẦN B — TẠO DATABASE VÀ KHO ẢNH
+--------------------------------
+
+1. Đăng nhập Cloudflare Dashboard.
+2. Vào Workers & Pages > D1 SQL Database > Create.
+3. Đặt tên database: 11tin-class-data
+4. Mở database vừa tạo > Console.
+5. Mở file schema.sql trong project, sao chép TOÀN BỘ nội dung, dán vào Console
+   rồi nhấn Execute.
+
+Lệnh SQL này tự tạo bảng và nhập sẵn 36 học sinh. Chỉ chạy toàn bộ file này
+một lần khi khởi tạo database mới. Sau đó quản lý danh sách trực tiếp trên web.
+
+6. Vào R2 Object Storage > Create bucket.
+7. Đặt tên bucket: 11tin-student-photos
+8. Tạo bucket. Không cần tạo public bucket hay public URL.
+
+
+PHẦN C — TẠO CLOUDFLARE PAGES
+------------------------------
+
+1. Vào Workers & Pages > Create application > Pages > Connect to Git.
+2. Kết nối GitHub nếu Cloudflare hỏi, rồi chọn repository:
+   salmonaz/salmonaz.github.io
+3. Chọn branch production: main.
+4. Điền đúng cấu hình build sau:
+
+   Framework preset: None
+   Build command: exit 0
+   Build output directory: .
+   Root directory: để trống
+
+5. Nhấn Save and Deploy.
+6. Khi deploy xong, Cloudflare cấp một địa chỉ dạng:
+   https://ten-du-an.pages.dev
+
+Hãy mở địa chỉ pages.dev này để dùng website. Đây là địa chỉ cần gửi cho mọi người
+trong giai đoạn đầu.
+
+
+PHẦN D — NỐI DATABASE, KHO ẢNH VÀ MẬT KHẨU QUẢN TRỊ
+-----------------------------------------------------
+
+Trong Pages project vừa tạo:
+
+1. Vào Settings > Bindings > Add > D1 database binding.
+   - Variable name: DB
+   - D1 database: chọn 11tin-class-data
+   - Lưu lại.
+
+2. Vào Settings > Bindings > Add > R2 bucket.
+   - Variable name: PHOTOS
+   - R2 bucket: chọn 11tin-student-photos
+   - Lưu lại.
+
+3. Vào Settings > Variables and Secrets > Add.
+   Tạo hai giá trị dạng Secret / Encrypt (không tạo dạng text thường):
+
+   Tên:  ADMIN_PASSWORD
+   Giá trị: mật khẩu bạn muốn dùng để mở quản trị website.
+
+   Tên:  SESSION_SECRET
+   Giá trị: một chuỗi ngẫu nhiên dài ít nhất 32 ký tự.
+
+   Có thể dùng trình tạo mật khẩu để tạo SESSION_SECRET. Không dùng lại mật khẩu
+   quản trị cho SESSION_SECRET.
+
+4. Nếu Cloudflare cho chọn môi trường, hãy đặt DB, PHOTOS và hai Secret cho
+   Production. Có thể thêm y hệt cho Preview nếu muốn dùng link preview.
+5. Sau khi lưu bindings và secrets, vào Deployments và chọn Retry deployment
+   cho deployment mới nhất (hoặc đẩy một commit mới lên GitHub).
+
+Các giá trị ADMIN_PASSWORD và SESSION_SECRET chỉ ở Cloudflare; chúng không nằm
+trong code hay trên trình duyệt của người xem.
+
+
+PHẦN E — KIỂM TRA SAU KHI DEPLOY
+--------------------------------
+
+Thay <URL-PAGES> bằng URL .pages.dev của bạn:
+
+1. Mở:
+   <URL-PAGES>/api/health
+   Kết quả đúng: {"ok":true}
+
+2. Mở:
+   <URL-PAGES>/api/students
+   Kết quả đúng: có danh sách 36 học sinh.
+
+3. Mở trang chủ <URL-PAGES>.
+   - Tab "Thi đua lớp" lấy dữ liệu công khai từ nguồn nhà trường.
+   - Tab "Chỗ ngồi" hiển thị 4 tổ, mỗi tổ 5 bàn, mỗi bàn 2 chỗ.
+   - Tab "Thi đua cá nhân" hiển thị điểm đã được lưu.
+
+4. Mở quản trị:
+   - Nhấn đúng nút rất nhỏ ở góc phải dưới cùng.
+   - Biểu tượng chìa khóa xuất hiện ở góc trái dưới cùng; nhấn biểu tượng đó.
+   - Nhập ADMIN_PASSWORD.
+
+5. Khi đã vào quản trị:
+   - Kéo tên vào ghế trên máy tính; nếu đang đổi một học sinh sang ghế đã có
+     người, hai học sinh sẽ đổi chỗ cho nhau.
+   - Trên điện thoại: chạm tên học sinh, rồi chạm ghế đích.
+   - Nhấn "Lưu bố trí" trước khi rời trang.
+   - Nhấn học sinh trong tab "Thi đua cá nhân" để sửa hồ sơ, thay ảnh hoặc xem
+     lịch sử điểm.
+   - Dùng nút + / − để thêm điểm; trong hồ sơ có thể xóa riêng một lượt điểm.
+
+
+PHẦN F — SỬ DỤNG HẰNG NGÀY
+--------------------------
+
+- Dữ liệu thi đua lớp tự tải lại từ nguồn công khai của trường. Website có cache
+  ngắn trong trình duyệt để giảm request; nhấn "Thử lại" để lấy dữ liệu mới ngay.
+- Chỗ ngồi được lưu riêng cho từng tháng. Chuyển ô Tháng để xem hoặc tạo sơ đồ
+  của tháng khác.
+- Tất cả thay đổi về chỗ ngồi, học sinh, ảnh và điểm được lưu vào Cloudflare,
+  nên mọi thiết bị đều thấy bản mới sau khi tải lại trang.
+- Khi sau này có phiên bản code mới: Commit + Push origin trên GitHub Desktop.
+  Cloudflare Pages tự deploy bản mới; không cần tải file thủ công lên hosting.
+
+
+LỖI THƯỜNG GẶP
+--------------
+
+1. /api/health báo lỗi 500
+   Kiểm tra lại Pages > Settings > Bindings có D1 tên đúng là DB và đã chạy
+   toàn bộ file schema.sql trong D1 Console.
+
+2. Không tải hoặc không thay ảnh được
+   Kiểm tra lại Pages > Settings > Bindings có R2 tên đúng là PHOTOS, sau đó
+   redeploy Pages project.
+
+3. Nhập đúng mật khẩu nhưng không mở được quản trị
+   Kiểm tra hai Secret có đúng tên ADMIN_PASSWORD và SESSION_SECRET, rồi redeploy.
+
+4. Website mở được nhưng tab Chỗ ngồi / Thi đua cá nhân báo chưa kết nối backend
+   Bạn đang mở URL GitHub Pages cũ hoặc deployment chưa có binding. Hãy dùng URL
+   .pages.dev và kiểm tra lại phần D.
+
+5. Muốn dùng tên miền riêng thay cho .pages.dev
+   Vào Pages project > Custom domains > Set up a domain. Chỉ chuyển tên miền sang
+   Cloudflare Pages sau khi URL .pages.dev hoạt động hoàn chỉnh.
+

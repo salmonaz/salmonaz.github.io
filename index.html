@@ -3,44 +3,83 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#08111f">
-  <title>Thi đua 11 Tin</title>
-  <meta name="description" content="Dữ liệu thi đua công khai của lớp 11 Tin.">
+  <meta name="theme-color" content="#f4f8ff">
+  <meta name="description" content="Trang thông tin lớp 11 Tin: thi đua, sơ đồ chỗ ngồi và thi đua cá nhân.">
+  <title>11 Tin</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23087ca7'/%3E%3Cpath fill='white' d='M17 17h9v12h12V17h9v30h-9V36H26v11h-9z'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261018-3">
 </head>
 <body>
   <div class="page-noise"></div>
-  <nav class="navbar fixed-top glass-nav"><div class="container-xl">
-    <a class="navbar-brand brand-wrap" href="#tong-quan"><span class="brand-logo"><i class="bi bi-cpu-fill"></i></span><span><strong>11 Tin</strong><small>THEO DÕI THI ĐUA</small></span></a>
-    <div class="nav-actions ms-auto d-flex align-items-center gap-2"><a class="nav-link nav-home d-none d-md-inline-flex" href="#nhat-ky"><i class="bi bi-journal-text me-1"></i>Nhật ký</a><button class="theme-toggle" id="themeToggle" aria-label="Đổi giao diện"><i class="bi bi-moon-stars-fill" id="themeIcon"></i></button></div>
-  </div></nav>
-  <main>
-    <section class="hero-section" id="tong-quan"><div class="container-xl position-relative">
-      <div class="hero-glow glow-a"></div><div class="hero-glow glow-b"></div>
-      <div class="row align-items-end g-4"><div class="col-lg-8"><div class="eyebrow reveal">ĐOÀN TRƯỜNG THPT CHUYÊN LÊ QUÝ ĐÔN</div><h1 class="hero-title reveal delay-1">Thi đua <span>11 Tin</span></h1><p class="hero-subtitle reveal delay-2">Theo dõi dữ liệu thi đua nề nếp công khai của lớp 11 Tin, đồng bộ từ nguồn dữ liệu của nhà trường.</p></div>
-        <div class="col-lg-4"><div class="class-card reveal delay-2"><div class="pulse-dot" id="statusDot"></div><div><div class="class-card-label">TRẠNG THÁI NGUỒN</div><div class="class-card-name" id="sourceStatus">Đang tải</div></div><div class="class-card-icon"><i class="bi bi-cloud-arrow-down-fill"></i></div></div></div>
+  <nav class="navbar fixed-top glass-nav">
+    <div class="container-xl">
+      <a class="navbar-brand brand-wrap" href="#tong-quan" data-view-target="overview">
+        <span class="brand-logo"><i class="bi bi-cpu-fill"></i></span>
+        <span><strong>11 Tin</strong><small>THÔNG TIN LỚP</small></span>
+      </a>
+      <div class="nav-actions ms-auto d-flex align-items-center gap-1">
+        <button class="nav-link app-tab active" data-view-target="overview"><i class="bi bi-bar-chart-line me-1"></i>Thi đua lớp</button>
+        <button class="nav-link app-tab" data-view-target="seating"><i class="bi bi-grid-3x3-gap-fill me-1"></i>Chỗ ngồi</button>
+        <button class="nav-link app-tab" data-view-target="individual"><i class="bi bi-people-fill me-1"></i>Thi đua cá nhân</button>
+        <button class="theme-toggle" id="themeToggle" aria-label="Đổi giao diện"><i class="bi bi-sun-fill" id="themeIcon"></i></button>
       </div>
-      <div class="filter-bar reveal delay-3"><div class="filter-left"><span class="live-dot"></span><span>Năm học <strong id="schoolYear">Đang xác minh…</strong></span></div><div class="filter-right"><span class="updated" id="updatedAt"><i class="bi bi-clock-history"></i> Đang kết nối nguồn dữ liệu</span><button class="period-btn active" id="retryBtn"><i class="bi bi-arrow-clockwise me-1"></i>Thử lại</button></div></div>
+    </div>
+  </nav>
+
+  <main>
+    <section id="overviewView" class="app-view">
+      <section class="hero-section" id="tong-quan"><div class="container-xl position-relative">
+        <div class="hero-glow glow-a"></div><div class="hero-glow glow-b"></div>
+        <div class="row align-items-end g-4">
+          <div class="col-lg-8"><div class="eyebrow reveal">ĐOÀN TRƯỜNG THPT CHUYÊN LÊ QUÝ ĐÔN</div><h1 class="hero-title reveal delay-1">Thi đua <span>11 Tin</span></h1><p class="hero-subtitle reveal delay-2">Theo dõi dữ liệu thi đua nề nếp công khai của lớp 11 Tin từ nguồn dữ liệu nhà trường.</p></div>
+          <div class="col-lg-4"><div class="class-card reveal delay-2"><div class="pulse-dot"></div><div><div class="class-card-label">TRẠNG THÁI NGUỒN</div><div class="class-card-name" id="sourceStatus">Đang tải</div></div><div class="class-card-icon"><i class="bi bi-cloud-arrow-down-fill"></i></div></div></div>
+        </div>
+        <div class="filter-bar reveal delay-3"><div class="filter-left"><span class="live-dot"></span><span>Năm học <strong id="schoolYear">Đang xác minh…</strong></span></div><div class="filter-right"><span class="updated" id="updatedAt"><i class="bi bi-clock-history"></i> Đang kết nối nguồn dữ liệu</span><button class="period-btn active" id="retryBtn"><i class="bi bi-arrow-clockwise me-1"></i>Thử lại</button></div></div>
+      </div></section>
+      <section class="container-xl stats-section" aria-live="polite"><div class="row g-3">
+        <div class="col-12 col-sm-6 col-xl-3 reveal"><article class="stat-card stat-main"><div class="stat-icon"><i class="bi bi-trophy-fill"></i></div><div class="stat-label">XẾP HẠNG TOÀN TRƯỜNG</div><div class="stat-value data-value" id="rankValue">—</div><div class="stat-note" id="rankNote">Đang tải dữ liệu</div></article></div>
+        <div class="col-12 col-sm-6 col-xl-3 reveal delay-1"><article class="stat-card"><div class="stat-icon green"><i class="bi bi-plus-circle-fill"></i></div><div class="stat-label">ĐIỂM CỘNG</div><div class="stat-value data-value positive" id="plusValue">—</div><div class="stat-note" id="plusNote">—</div></article></div>
+        <div class="col-12 col-sm-6 col-xl-3 reveal delay-2"><article class="stat-card"><div class="stat-icon red"><i class="bi bi-dash-circle-fill"></i></div><div class="stat-label">ĐIỂM TRỪ</div><div class="stat-value data-value negative" id="minusValue">—</div><div class="stat-note" id="minusNote">—</div></article></div>
+        <div class="col-12 col-sm-6 col-xl-3 reveal delay-3"><article class="stat-card"><div class="stat-icon blue"><i class="bi bi-stars"></i></div><div class="stat-label">TỔNG ĐIỂM</div><div class="stat-value data-value" id="totalValue">—</div><div class="stat-note" id="totalNote">—</div></article></div>
+      </div></section>
+      <section class="container-xl content-section"><div class="row g-4">
+        <div class="col-xl-8 reveal"><article class="panel-card"><div class="panel-head"><div><div class="panel-kicker">BIẾN ĐỘNG</div><h2>Điểm thi đua theo tuần</h2><p>Chỉ hiển thị các tuần có dữ liệu từ nguồn.</p></div><span class="trend-badge" id="chartBadge">Đang tải</span></div><div class="chart-wrap"><canvas id="scoreChart"></canvas><div class="data-state loading-state" id="chartState"><span class="spinner-border spinner-border-sm"></span> Đang tải biểu đồ…</div></div><div class="legend-row"><span><i class="legend-dot"></i>Tổng tuần</span><span class="legend-note" id="chartLegend">Không nội suy số liệu</span></div></article></div>
+        <div class="col-xl-4 reveal delay-1"><article class="panel-card rank-panel"><div class="panel-head compact"><div><div class="panel-kicker">XẾP HẠNG</div><h2>Vị trí của 11 Tin</h2></div><span class="mini-badge" id="rankBadge">—</span></div><div class="rank-list" id="rankList"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải xếp hạng…</div></div><div class="rank-foot"><span><i class="bi bi-info-circle"></i> Theo bảng tổng hợp công khai</span></div></article></div>
+      </div></section>
+      <section class="container-xl content-section pt-0"><div class="row g-4">
+        <div class="col-lg-5 reveal"><article class="panel-card breakdown-panel h-100"><div class="panel-head compact"><div><div class="panel-kicker">PHÂN TÍCH</div><h2>Cơ cấu điểm</h2></div><i class="bi bi-pie-chart-fill panel-head-icon"></i></div><div class="donut-layout" id="breakdown"><div class="donut" style="--p:0%"><div class="donut-inner"><strong>—</strong><span>chưa có dữ liệu</span></div></div><div class="breakdown-list"><div class="data-state">Đang tải dữ liệu.</div></div></div></article></div>
+        <div class="col-lg-7 reveal delay-1"><article class="panel-card h-100"><div class="panel-head compact"><div><div class="panel-kicker">NHẬT KÝ</div><h2>Sự kiện thi đua gần đây</h2></div></div><div class="activity-list" id="activityList"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải nhật ký…</div></div></article></div>
+      </div></section>
+    </section>
+
+    <section id="seatingView" class="app-view d-none page-section"><div class="container-xl">
+      <header class="page-heading"><div><div class="eyebrow">SƠ ĐỒ LỚP HỌC</div><h1>Chỗ ngồi</h1><p>Sơ đồ hiển thị bố trí hiện tại. Khi bật quản trị, kéo thả trên máy tính hoặc chạm tên rồi chạm chỗ ngồi trên điện thoại, sau đó lưu.</p></div></header>
+      <div class="backend-alert d-none" id="backendAlert"><i class="bi bi-cloud-slash"></i><span>Chưa kết nối được backend lớp. Hãy hoàn tất hướng dẫn trong file HUONG_DAN_CLOUDFLARE.txt.</span></div>
+      <section class="seating-layout">
+        <aside class="roster-panel panel-card"><div class="panel-head compact"><div><div class="panel-kicker">DANH SÁCH LỚP</div><h2>Chưa xếp chỗ</h2></div><div class="roster-head-actions"><span class="mini-badge" id="unseatedCount">—</span><button class="mini-add-student admin-only d-none" type="button" id="addStudentBtn" aria-label="Thêm học sinh"><i class="bi bi-person-plus-fill"></i></button></div></div><div class="student-roster" id="unseatedRoster"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải danh sách…</div></div></aside>
+        <section class="classroom-panel panel-card"><div class="classroom-front"><i class="bi bi-easel2-fill"></i> BẢNG</div><div class="groups-grid" id="groupsGrid"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải sơ đồ…</div></div><div class="admin-seat-actions admin-only d-none"><span class="seat-touch-note"><i class="bi bi-hand-index-thumb"></i> Chạm tên rồi chạm chỗ để xếp trên điện thoại</span><button class="period-btn" id="autoSeatBtn"><i class="bi bi-magic me-1"></i>Xếp theo danh sách</button><button class="period-btn active" id="saveSeatsBtn"><i class="bi bi-floppy-fill me-1"></i>Lưu bố trí</button></div></section>
+      </section>
     </div></section>
-    <section class="container-xl stats-section" aria-live="polite"><div class="row g-3">
-      <div class="col-12 col-sm-6 col-xl-3 reveal"><article class="stat-card stat-main"><div class="stat-icon"><i class="bi bi-trophy-fill"></i></div><div class="stat-label">XẾP HẠNG TOÀN TRƯỜNG</div><div class="stat-value data-value" id="rankValue">—</div><div class="stat-note" id="rankNote">Đang tải dữ liệu</div></article></div>
-      <div class="col-12 col-sm-6 col-xl-3 reveal delay-1"><article class="stat-card"><div class="stat-icon green"><i class="bi bi-plus-circle-fill"></i></div><div class="stat-label">ĐIỂM CỘNG</div><div class="stat-value data-value positive" id="plusValue">—</div><div class="stat-note" id="plusNote">—</div></article></div>
-      <div class="col-12 col-sm-6 col-xl-3 reveal delay-2"><article class="stat-card"><div class="stat-icon red"><i class="bi bi-dash-circle-fill"></i></div><div class="stat-label">ĐIỂM TRỪ</div><div class="stat-value data-value negative" id="minusValue">—</div><div class="stat-note" id="minusNote">—</div></article></div>
-      <div class="col-12 col-sm-6 col-xl-3 reveal delay-3"><article class="stat-card"><div class="stat-icon blue"><i class="bi bi-stars"></i></div><div class="stat-label">TỔNG ĐIỂM</div><div class="stat-value data-value" id="totalValue">—</div><div class="stat-note" id="totalNote">—</div></article></div>
+
+    <section id="individualView" class="app-view d-none page-section"><div class="container-xl">
+      <header class="page-heading"><div><div class="eyebrow">THEO DÕI CÁ NHÂN</div><h1>Thi đua cá nhân</h1><p>Điểm do quản trị lớp cập nhật. Nhấn vào một học sinh để xem hồ sơ hoặc thay ảnh khi đã bật quản trị.</p></div></header>
+      <article class="panel-card"><div class="panel-head"><div><div class="panel-kicker">BẢNG XẾP HẠNG</div><h2>Điểm thi đua cá nhân</h2><p id="leaderboardInfo">Đang tải dữ liệu.</p></div><div class="search-box"><i class="bi bi-search"></i><input id="studentSearch" type="search" placeholder="Tìm học sinh…"></div></div><div class="table-responsive"><table class="table table-custom align-middle mb-0"><thead><tr><th>HẠNG</th><th>HỌC SINH</th><th>TỔ</th><th class="text-end">ĐIỂM</th><th class="admin-only d-none text-end">QUẢN TRỊ</th></tr></thead><tbody id="leaderboardRows"><tr><td colspan="5"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải danh sách…</div></td></tr></tbody></table></div></article>
     </div></section>
-    <section class="container-xl content-section"><div class="row g-4">
-      <div class="col-xl-8 reveal"><article class="panel-card chart-panel"><div class="panel-head"><div><div class="panel-kicker">BIẾN ĐỘNG</div><h2>Điểm thi đua theo tuần</h2><p>Chỉ hiển thị các tuần có dữ liệu từ nguồn.</p></div><span class="trend-badge" id="chartBadge">Đang tải</span></div><div class="chart-wrap" id="chartWrap"><canvas id="scoreChart"></canvas><div class="data-state loading-state" id="chartState"><span class="spinner-border spinner-border-sm"></span> Đang tải biểu đồ…</div></div><div class="legend-row"><span><i class="legend-dot"></i>Tổng tuần</span><span class="legend-note" id="chartLegend">Không nội suy số liệu</span></div></article></div>
-      <div class="col-xl-4 reveal delay-1"><article class="panel-card rank-panel"><div class="panel-head compact"><div><div class="panel-kicker">XẾP HẠNG</div><h2>Vị trí của 11 Tin</h2></div><span class="mini-badge" id="rankBadge">—</span></div><div class="rank-list" id="rankList"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải xếp hạng…</div></div><div class="rank-foot"><span><i class="bi bi-info-circle"></i> Theo bảng tổng hợp công khai</span></div></article></div>
-    </div></section>
-    <section class="container-xl content-section pt-0"><div class="row g-4">
-      <div class="col-lg-5 reveal"><article class="panel-card breakdown-panel h-100"><div class="panel-head compact"><div><div class="panel-kicker">PHÂN TÍCH</div><h2>Cơ cấu điểm</h2></div><i class="bi bi-pie-chart-fill panel-head-icon"></i></div><div class="donut-layout" id="breakdown"><div class="donut" style="--p:0%"><div class="donut-inner"><strong>—</strong><span>chưa có dữ liệu</span></div></div><div class="breakdown-list"><div class="data-state">Dữ liệu thành phần sẽ chỉ hiện khi digiLQD cung cấp.</div></div></div></article></div>
-      <div class="col-lg-7 reveal delay-1" id="nhat-ky"><article class="panel-card h-100"><div class="panel-head compact"><div><div class="panel-kicker">NHẬT KÝ</div><h2>Sự kiện thi đua gần đây</h2></div></div><div class="activity-list" id="activityList"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải nhật ký…</div></div></article></div>
-    </div></section>
-    <section class="container-xl content-section pt-0"><article class="panel-card reveal"><div class="panel-head"><div><div class="panel-kicker">THEO DÕI CHI TIẾT</div><h2>Nhật ký thi đua</h2><p>Chỉ hiển thị bản ghi công khai của lớp 11 Tin.</p></div><div class="search-box"><i class="bi bi-search"></i><input id="searchInput" type="search" placeholder="Tìm nội dung hoặc họ tên…" disabled></div></div><div class="table-responsive"><table class="table table-custom align-middle mb-0" id="violationTable"><thead><tr><th>HỌ TÊN</th><th>NỘI DUNG</th><th>THỜI GIAN</th><th class="text-end">ĐIỂM</th></tr></thead><tbody id="violationRows"><tr><td colspan="4"><div class="data-state loading-state"><span class="spinner-border spinner-border-sm"></span> Đang tải nhật ký…</div></td></tr></tbody></table></div></article></section>
   </main>
-  <footer class="footer"><div class="container-xl d-flex flex-column flex-md-row justify-content-between align-items-center gap-2"><div>Thi đua lớp <strong>11 Tin</strong></div><a class="footer-muted" href="https://www.dtnlqd.vn/dashboard.html" target="_blank" rel="noopener">Nguồn dữ liệu công khai <i class="bi bi-box-arrow-up-right"></i></a></div></footer>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script><script src="script.js?v=20260914-5"></script>
-</body></html>
+
+  <footer class="footer"><div class="container-xl"><div>Thông tin lớp <strong>11 Tin</strong></div></div></footer>
+
+  <button id="adminTriggerOne" class="admin-trigger-one" aria-label="Mở quản trị"></button>
+  <button id="adminTriggerTwo" class="admin-trigger-two d-none" aria-label="Xác nhận mở quản trị"><i class="bi bi-key-fill"></i></button>
+
+  <dialog class="app-dialog" id="adminDialog"><form method="dialog" class="dialog-card" id="adminForm"><button class="dialog-close" type="button" id="closeAdminDialog" aria-label="Đóng"><i class="bi bi-x-lg"></i></button><div class="dialog-icon"><i class="bi bi-shield-lock-fill"></i></div><h2>Quản trị lớp</h2><p>Nhập mật khẩu quản trị để thay đổi chỗ ngồi, điểm cá nhân và ảnh học sinh.</p><label>Mật khẩu quản trị<input id="adminPassword" type="password" autocomplete="current-password" required></label><p class="form-error d-none" id="adminError"></p><button class="period-btn active w-100" type="submit" id="adminSubmit">Mở quản trị</button></form></dialog>
+
+  <dialog class="app-dialog" id="studentDialog"><div class="dialog-card student-dialog"><button class="dialog-close" type="button" data-close-dialog="studentDialog" aria-label="Đóng"><i class="bi bi-x-lg"></i></button><div id="studentDialogContent"></div></div></dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="script.js?v=20261018-3"></script>
+</body>
+</html>
