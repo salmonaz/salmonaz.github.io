@@ -180,22 +180,35 @@ async function adminHandler(request, env, path) {
 
   if (request.method === "PUT" && path[1] === "seating") {
     const body = await request.json().catch(() => ({}));
-    if (!/^\d{4}-\d{2}$/.test(body.month || "") || !body.assignments || typeof body.assignments !== "object") {
+    if (!/^\d{4}-\d{2}$/.test(body.month || "") || !body.assignments || typeof body.assignments !== "object" || Array.isArray(body.assignments)) {
       return fail("Dữ liệu chỗ ngồi không hợp lệ.");
     }
-    const rows = Object.entries(body.assignments).filter(([seat, student]) =>
-      /^g[1-4]-d[1-5]-s[1-2]$/.test(seat) && typeof student === "string"
-    );
-    const ids = rows.map(([, studentId]) => studentId);
+    const seatPattern = /^g([1-4])-d[1-5]-s[1-2]$/;
+    const rows = Object.entries(body.assignments).map(([seat, studentId]) => {
+      const match = seatPattern.exec(seat);
+      return { seat, studentId, groupNo: match ? Number(match[1]) : null };
+    });
+    if (rows.some(row => !row.groupNo || typeof row.studentId !== "string" || !row.studentId.trim())) {
+      return fail("Dữ liệu chỗ ngồi không hợp lệ.");
+    }
+    const ids = rows.map(row => row.studentId);
     if (new Set(ids).size !== ids.length) return fail("Một học sinh không thể ngồi ở hai chỗ.");
     if (!await validateStudentIds(env, ids)) return fail("Có học sinh không thuộc danh sách lớp.");
 
     const now = new Date().toISOString();
     const statements = [
       env.DB.prepare("DELETE FROM seating WHERE seat_month = ?").bind(body.month),
-      ...rows.map(([seat, studentId]) => env.DB
+      ...rows.map(({ seat, studentId }) => env.DB
         .prepare("INSERT INTO seating (seat_month, seat_id, student_id, updated_at) VALUES (?, ?, ?, ?)")
-        .bind(body.month, seat, studentId, now))
+        .bind(body.month, seat, studentId, now)),
+      ...[1, 2, 3, 4].flatMap(groupNo => {
+        const memberIds = rows.filter(row => row.groupNo === groupNo).map(row => row.studentId);
+        if (!memberIds.length) return [];
+        const placeholders = memberIds.map(() => "?").join(", ");
+        return [env.DB
+          .prepare(`UPDATE students SET group_no = ? WHERE id IN (${placeholders})`)
+          .bind(groupNo, ...memberIds)];
+      })
     ];
     await env.DB.batch(statements);
     return json({ ok: true });

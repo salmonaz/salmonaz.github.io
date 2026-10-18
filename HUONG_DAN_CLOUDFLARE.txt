@@ -185,6 +185,11 @@ Thay <URL-PAGES> bằng URL .pages.dev của bạn:
    - Kéo tên vào ghế trên máy tính; nếu đang đổi một học sinh sang ghế đã có
      người, hai học sinh sẽ đổi chỗ cho nhau.
    - Trên điện thoại: chạm tên học sinh, rồi chạm ghế đích.
+   - Có thể tìm học sinh bằng ô tìm kiếm ở danh sách lớp. Ô này chỉ hiện khi
+     đã vào quản trị; khi đang tìm, cả học sinh đã xếp chỗ cũng sẽ hiện ra.
+   - Để đổi vị trí cả tổ: kéo tên Tổ ở đầu khung tổ sang tổ đích trên máy tính.
+     Trên điện thoại, chạm tên Tổ thứ nhất rồi chạm tên Tổ đích. Học sinh trong
+     hai tổ sẽ đổi vị trí và số tổ của các em được cập nhật khi nhấn Lưu bố trí.
    - Nhấn "Lưu bố trí" trước khi rời trang.
    - Nhấn học sinh trong tab "Thi đua cá nhân" để sửa hồ sơ, thay ảnh hoặc xem
      lịch sử điểm từ trường và các điều chỉnh thủ công.
