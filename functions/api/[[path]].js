@@ -60,6 +60,10 @@ async function requireAdmin(request, env) {
   return await verifySession(request, env) ? null : fail("Bạn không có quyền quản trị.", 401);
 }
 
+function missingAdminSecrets(env) {
+  return ["ADMIN_PASSWORD", "SESSION_SECRET"].filter(name => !env[name]);
+}
+
 function studentPublic(row) {
   return {
     id: row.id,
@@ -148,12 +152,14 @@ async function validateStudentIds(env, ids) {
 async function adminHandler(request, env, path) {
   if (request.method === "POST" && path[1] === "session") {
     const body = await request.json().catch(() => ({}));
-    if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET) return fail("Backend chưa có Secret quản trị.", 503);
+    const missing = missingAdminSecrets(env);
+    if (missing.length) return fail(`Thiếu cấu hình quản trị: ${missing.join(", ")}.`, 503);
     if (!safeEqual(body.password, env.ADMIN_PASSWORD)) return fail("Mật khẩu quản trị không đúng.", 401);
     return json({ token: await createSession(env), expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
   }
 
-  if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET) return fail("Backend chưa có Secret quản trị.", 503);
+  const missing = missingAdminSecrets(env);
+  if (missing.length) return fail(`Thiếu cấu hình quản trị: ${missing.join(", ")}.`, 503);
 
   const blocked = await requireAdmin(request, env);
   if (blocked) return blocked;

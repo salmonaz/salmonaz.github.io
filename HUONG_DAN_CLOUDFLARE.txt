@@ -111,6 +111,15 @@ PHẦN D — NỐI DATABASE, KHO ẢNH VÀ MẬT KHẨU QUẢN TRỊ
 
 Trong Pages project vừa tạo:
 
+LƯU Ý KHI KIỂM TRA WEB
+----------------------
+
+- Website có backend hiện tại là: https://salmonaz-github-io.pages.dev
+- Không dùng https://salmonaz.github.io để kiểm tra chỗ ngồi, ảnh, điểm thủ
+  công hoặc quản trị. Đó là GitHub Pages nên không có đường dẫn /api.
+- Nếu trang báo "Backend chưa có Secret quản trị", thực hiện ngay bước 3 bên
+  dưới, rồi bước 5 để deploy lại.
+
 1. Vào Settings > Bindings > Add > D1 database binding.
    - Variable name: DB
    - D1 database: chọn 11tin-class-data

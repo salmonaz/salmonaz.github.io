@@ -1,9 +1,18 @@
 /* Frontend for Cloudflare Pages. Class competition data remains read-only from the school's public source. */
 const SCHOOL_API = Object.freeze({
-  base: "https://firestore.googleapis.com/v1/projects/doanthptchuyenlequydon/databases/(default)/documents",
-  apiKey: "AIzaSyBZjf4cej0daDmPiL5JhjH_bFX7kQpKX0w",
+  firebaseConfig: {
+    apiKey: "AIzaSyBZjf4cej0daDmPiL5JhjH_bFX7kQpKX0w",
+    authDomain: "doanthptchuyenlequydon.firebaseapp.com",
+    projectId: "doanthptchuyenlequydon",
+    storageBucket: "doanthptchuyenlequydon.firebasestorage.app",
+    messagingSenderId: "970274151332",
+    appId: "1:970274151332:web:84eabed1b31b424173bf31"
+  },
   classId: "MM2KGZwgLGLHDvod10ZW",
-  cacheKey: "thidua-11tin-public-v3", cacheMs: 5 * 60 * 1000
+  summaryCacheKey: "thidua-11tin-summary-v4",
+  individualCacheKey: "thidua-11tin-individual-v4",
+  cacheMs: 5 * 60 * 1000,
+  individualCacheMs: 60 * 1000
 });
 
 const $ = id => document.getElementById(id);
@@ -15,7 +24,9 @@ const state = {
   manualLeaderboard: [],
   leaderboard: [],
   schoolRecordsState: "loading",
-  schoolLoadPromise: null,
+  schoolSummaryState: "loading",
+  schoolSummaryPromise: null,
+  schoolIndividualPromise: null,
   schoolEventsByStudent: new Map(),
   unmatchedSchoolRecords: [],
   seating: {},
@@ -62,40 +73,70 @@ function showView(name) {
   document.querySelectorAll(".app-tab").forEach(button => button.classList.toggle("active", button.dataset.viewTarget === name));
   if (name === "seating") state.seatMonth = monthNow();
   if (name === "seating" || name === "individual") loadClassData();
-  if (name === "individual") loadSchoolData();
+  if (name === "individual") loadIndividualSchoolData();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll("[data-view-target]").forEach(element => element.addEventListener("click", event => { event.preventDefault(); showView(element.dataset.viewTarget); }));
 
-/* School public data */
-function schoolEndpoint(path) { return `${SCHOOL_API.base}${path.startsWith(":") ? "" : "/"}${path}?key=${SCHOOL_API.apiKey}`; }
-async function schoolRequest(path, options) { const response = await fetch(schoolEndpoint(path), options); if (!response.ok) throw new Error(`Nguồn thi đua trả về ${response.status}`); return response.json(); }
-function firestoreValue(field) {
-  if (!field) return undefined;
-  if ("stringValue" in field) return field.stringValue;
-  if ("integerValue" in field) return Number(field.integerValue);
-  if ("doubleValue" in field) return Number(field.doubleValue);
-  if ("booleanValue" in field) return field.booleanValue;
-  if ("timestampValue" in field) return field.timestampValue;
-  if ("mapValue" in field) return Object.fromEntries(Object.entries(field.mapValue.fields || {}).map(([key, item]) => [key, firestoreValue(item)]));
-  return undefined;
+/* School public data — same Firestore web client used by the school dashboard. */
+let firebaseSchoolClientPromise;
+async function getFirebaseSchoolClient() {
+  if (!firebaseSchoolClientPromise) {
+    firebaseSchoolClientPromise = Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js")
+    ]).then(([appSdk, firestore]) => {
+      const appName = "11tin-public-source";
+      const app = appSdk.getApps().find(item => item.name === appName) || appSdk.initializeApp(SCHOOL_API.firebaseConfig, appName);
+      return { db: firestore.getFirestore(app), firestore };
+    });
+  }
+  return firebaseSchoolClientPromise;
 }
-function firestoreDocument(doc) { return Object.fromEntries(Object.entries(doc.fields || {}).map(([key, item]) => [key, firestoreValue(item)])); }
-async function getSchoolRecords(classId) {
-  const body = { structuredQuery: { from: [{ collectionId: "thidua_ghi" }], where: { fieldFilter: { field: { fieldPath: "lopId" }, op: "EQUAL", value: { stringValue: classId } } } } };
-  const results = await schoolRequest(":runQuery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  return results.filter(item => item.document).map(item => firestoreDocument(item.document));
+function schoolTimestamp(value) {
+  if (value && typeof value.toDate === "function") return value.toDate().toISOString();
+  if (value && Number.isFinite(value.seconds)) return new Date(value.seconds * 1000).toISOString();
+  return typeof value === "string" ? value : null;
+}
+function cacheSchoolData(key, data) { try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), data })); } catch {} }
+function getCachedSchoolData(key, maxAge) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(key));
+    return cached && Date.now() - cached.at < maxAge ? cached.data : null;
+  } catch {
+    return null;
+  }
 }
 async function getSchoolData() {
-  const [configDoc, classesDoc] = await Promise.all([schoolRequest("site/thidua"), schoolRequest("thidua_lops")]);
-  const config = firestoreDocument(configDoc);
-  const summaryDoc = await schoolRequest(`thidua_tonghop/${encodeURIComponent(config.nienHoc)}`);
-  const classes = (classesDoc.documents || []).map(doc => ({ id: doc.name.split("/").pop(), ...firestoreDocument(doc) }));
-  const records = await getSchoolRecords(SCHOOL_API.classId);
-  return { config, classes, summary: firestoreDocument(summaryDoc).data || {}, updatedAt: firestoreDocument(summaryDoc).capNhat, records: records.filter(record => record.nienHoc === config.nienHoc && !record.daXoa) };
+  const { db, firestore } = await getFirebaseSchoolClient();
+  const configSnapshot = await firestore.getDoc(firestore.doc(db, "site", "thidua"));
+  if (!configSnapshot.exists()) throw new Error("Không tìm thấy cấu hình thi đua công khai.");
+  const config = configSnapshot.data();
+  if (!config.nienHoc) throw new Error("Nguồn chưa xác định niên học.");
+  const [summarySnapshot, classesSnapshot] = await Promise.all([
+    firestore.getDoc(firestore.doc(db, "thidua_tonghop", config.nienHoc)),
+    firestore.getDocs(firestore.collection(db, "thidua_lops"))
+  ]);
+  const summaryData = summarySnapshot.exists() ? summarySnapshot.data() : {};
+  return {
+    config,
+    classes: classesSnapshot.docs.map(item => ({ id: item.id, ...item.data() })),
+    summary: summaryData.data || {},
+    updatedAt: schoolTimestamp(summaryData.capNhat)
+  };
 }
-function cacheSchoolData(data) { try { localStorage.setItem(SCHOOL_API.cacheKey, JSON.stringify({ at: Date.now(), data })); } catch {} }
-function getCachedSchoolData() { try { const cached = JSON.parse(localStorage.getItem(SCHOOL_API.cacheKey)); return cached && Date.now() - cached.at < SCHOOL_API.cacheMs ? cached.data : null; } catch { return null; } }
+async function getIndividualSchoolData() {
+  const { db, firestore } = await getFirebaseSchoolClient();
+  const [configSnapshot, recordsSnapshot] = await Promise.all([
+    firestore.getDoc(firestore.doc(db, "site", "thidua")),
+    firestore.getDocs(firestore.query(firestore.collection(db, "thidua_ghi"), firestore.where("lopId", "==", SCHOOL_API.classId)))
+  ]);
+  if (!configSnapshot.exists()) throw new Error("Không tìm thấy cấu hình thi đua công khai.");
+  const config = configSnapshot.data();
+  if (!config.nienHoc) throw new Error("Nguồn chưa xác định niên học.");
+  const records = recordsSnapshot.docs.map(item => item.data()).filter(record => record.nienHoc === config.nienHoc && !record.daXoa);
+  return { config, records };
+}
 function totalFor(weeks) { return Object.values(weeks || {}).reduce((total, week) => ({ plus: total.plus + Number(week.cong || 0), minus: total.minus + Number(week.tru || 0) }), { plus: 0, minus: 0 }); }
 function calculateRanks(summary, classes) {
   const rows = classes.map(item => ({ ...item, ...totalFor(summary[item.id]) })).map(item => ({ ...item, total: item.plus + item.minus })).sort((a, b) => b.total - a.total);
@@ -134,6 +175,7 @@ function updateChartTheme() { if (!state.chart) return; const colors = chartColo
 function hasNumericScore(value) { return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)); }
 function scoreClass(value) { return !hasNumericScore(value) ? "" : Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : ""; }
 function signedScore(value) { return hasNumericScore(value) ? `${Number(value) > 0 ? "+" : ""}${formatNumber(value)}` : "—"; }
+function hasManualAdjustment(value) { return hasNumericScore(value) && Number(value) !== 0; }
 function schoolRecordsAvailable() { return ["ready", "refreshing", "stale"].includes(state.schoolRecordsState); }
 function schoolPointData(students) {
   const aliases = new Map(); const totals = new Map(); const events = new Map(); const unmatched = [];
@@ -184,13 +226,11 @@ function renderSchoolRecords(records) {
 }
 function sourceStatus(name, message) { $("sourceStatus").textContent = name; $("updatedAt").innerHTML = `<i class="bi bi-clock-history"></i> ${message}`; }
 async function loadSchoolData(force = false) {
-  if (state.schoolLoadPromise) return state.schoolLoadPromise;
+  if (state.schoolSummaryPromise) return state.schoolSummaryPromise;
 
   const task = (async () => {
-    const hadSchoolData = schoolRecordsAvailable();
-    const cached = getCachedSchoolData();
-    state.schoolRecordsState = hadSchoolData ? "refreshing" : "loading";
-    refreshLeaderboard();
+    const cached = getCachedSchoolData(SCHOOL_API.summaryCacheKey, SCHOOL_API.cacheMs);
+    state.schoolSummaryState = cached ? "refreshing" : "loading";
 
     try {
       sourceStatus("Đang tải", "Đang kết nối nguồn dữ liệu");
@@ -200,10 +240,62 @@ async function loadSchoolData(force = false) {
       if (!data) {
         try {
           data = await getSchoolData();
-          cacheSchoolData(data);
+          cacheSchoolData(SCHOOL_API.summaryCacheKey, data);
         } catch (error) {
           if (!cached) throw error;
           console.warn("Không thể làm mới nguồn trường; dùng dữ liệu công khai đã lưu gần nhất.", error);
+          data = cached;
+          usingCachedData = true;
+        }
+      }
+
+      state.schoolSummaryState = usingCachedData ? "stale" : "ready";
+      $("schoolYear").textContent = data.config.nienHoc || "Chưa xác định";
+      const hasEvents = Boolean(data.summary[SCHOOL_API.classId] && Object.keys(data.summary[SCHOOL_API.classId]).length);
+      const updated = data.updatedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(data.updatedAt)) : "chưa có thời điểm";
+      const label = usingCachedData ? "Dữ liệu gần nhất" : hasEvents ? "Đã đồng bộ" : "Chưa phát sinh điểm";
+      const message = usingCachedData ? `Đang dùng bản công khai gần nhất: ${updated}` : `Cập nhật nguồn: ${updated}`;
+      sourceStatus(label, message);
+      renderSchoolSummary(data);
+    } catch (error) {
+      console.error(error);
+      state.schoolSummaryState = "error";
+      const personalDataReady = schoolRecordsAvailable();
+      sourceStatus(
+        personalDataReady ? "Đồng bộ một phần" : "Lỗi tải dữ liệu",
+        personalDataReady
+          ? "Đã tải điểm cá nhân; bảng tổng hợp của trường đang chưa phản hồi"
+          : "Không thể kết nối bảng tổng hợp của trường"
+      );
+      $("rankList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại.");
+      $("chartState").className = "data-state";
+      $("chartState").innerHTML = emptyState("Không thể tải biểu đồ.");
+    }
+  })();
+
+  state.schoolSummaryPromise = task.finally(() => { state.schoolSummaryPromise = null; });
+  return state.schoolSummaryPromise;
+}
+async function loadIndividualSchoolData(force = false) {
+  if (state.schoolIndividualPromise) return state.schoolIndividualPromise;
+
+  const task = (async () => {
+    const hadSchoolData = schoolRecordsAvailable();
+    const cached = getCachedSchoolData(SCHOOL_API.individualCacheKey, SCHOOL_API.individualCacheMs);
+    state.schoolRecordsState = hadSchoolData ? "refreshing" : "loading";
+    refreshLeaderboard();
+    if (state.manualLeaderboard.length) renderLeaderboard();
+
+    try {
+      let data = !force ? cached : null;
+      let usingCachedData = Boolean(data);
+      if (!data) {
+        try {
+          data = await getIndividualSchoolData();
+          cacheSchoolData(SCHOOL_API.individualCacheKey, data);
+        } catch (error) {
+          if (!cached) throw error;
+          console.warn("Không thể làm mới điểm cá nhân từ trường; dùng bản công khai gần nhất.", error);
           data = cached;
           usingCachedData = true;
           state.schoolRecordsState = "stale";
@@ -212,33 +304,31 @@ async function loadSchoolData(force = false) {
 
       if (state.schoolRecordsState !== "stale") state.schoolRecordsState = "ready";
       $("schoolYear").textContent = data.config.nienHoc || "Chưa xác định";
-      const hasEvents = Boolean(data.summary[SCHOOL_API.classId] && Object.keys(data.summary[SCHOOL_API.classId]).length);
-      const updated = data.updatedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(data.updatedAt)) : "chưa có thời điểm";
-      const label = state.schoolRecordsState === "stale" ? "Dữ liệu gần nhất" : hasEvents ? "Đã đồng bộ" : "Chưa phát sinh điểm";
-      const message = state.schoolRecordsState === "stale" ? `Chưa làm mới được nguồn; đang dùng bản công khai gần nhất: ${updated}` : `${usingCachedData ? "Bản đã lưu: " : "Cập nhật nguồn: "}${updated}`;
-      sourceStatus(label, message);
-      renderSchoolSummary(data);
       renderSchoolRecords(data.records);
       if (state.manualLeaderboard.length) renderLeaderboard();
+      if (state.schoolSummaryState === "error") {
+        sourceStatus(
+          "Đồng bộ một phần",
+          usingCachedData
+            ? "Đang dùng nhật ký điểm cá nhân gần nhất; bảng tổng hợp của trường đang chưa phản hồi"
+            : "Đã tải điểm cá nhân; bảng tổng hợp của trường đang chưa phản hồi"
+        );
+      } else if (usingCachedData && state.schoolSummaryState === "stale") {
+        sourceStatus("Dữ liệu gần nhất", "Đang dùng nhật ký công khai gần nhất của trường");
+      }
     } catch (error) {
       console.error(error);
       state.schoolRecordsState = hadSchoolData ? "stale" : "error";
       refreshLeaderboard();
-      sourceStatus("Lỗi tải dữ liệu", hadSchoolData ? "Không thể làm mới nguồn; đang hiển thị dữ liệu gần nhất" : "Không thể kết nối nguồn dữ liệu");
-      if (!hadSchoolData) {
-        $("rankList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại.");
-        $("activityList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại.");
-        $("chartState").className = "data-state";
-        $("chartState").innerHTML = emptyState("Không thể tải biểu đồ.");
-      }
+      if (!hadSchoolData) $("activityList").innerHTML = emptyState("Không thể đồng bộ nhật ký thi đua cá nhân từ trường.");
       if (state.manualLeaderboard.length) renderLeaderboard();
     }
   })();
 
-  state.schoolLoadPromise = task.finally(() => { state.schoolLoadPromise = null; });
-  return state.schoolLoadPromise;
+  state.schoolIndividualPromise = task.finally(() => { state.schoolIndividualPromise = null; });
+  return state.schoolIndividualPromise;
 }
-$("retryBtn").addEventListener("click", () => loadSchoolData(true));
+$("retryBtn").addEventListener("click", () => { loadSchoolData(true); loadIndividualSchoolData(true); });
 
 /* Backend class management */
 async function api(path, options = {}) {
@@ -340,8 +430,9 @@ function individualSourceText() {
   return `${count} học sinh · ${source}; điểm thủ công là điều chỉnh riêng${unmatched}.`;
 }
 function studentSourceNote(student) {
-  if (!schoolRecordsAvailable()) return state.schoolRecordsState === "error" ? "Chưa tải được điểm trường" : "Đang đồng bộ điểm trường";
-  const pieces = [`Trường ${signedScore(student.schoolTotal)}`, `Thủ công ${signedScore(student.manualTotal)}`];
+  if (!schoolRecordsAvailable()) return state.schoolRecordsState === "error" ? "Không thể đồng bộ điểm trường" : "Đang đồng bộ điểm trường";
+  const pieces = [`Điểm trường ${signedScore(student.schoolTotal)}`];
+  if (hasManualAdjustment(student.manualTotal)) pieces.push(`Điều chỉnh ${signedScore(student.manualTotal)}`);
   return student.overrideTotal !== null ? `Đang ghi đè · ${pieces.join(" · ")}` : pieces.join(" · ");
 }
 function renderLeaderboard() {
@@ -415,7 +506,8 @@ function scoreSummaryMarkup(score) {
   const sourceReady = schoolRecordsAvailable();
   const sourceScore = sourceReady ? `<strong class="${scoreClass(score.schoolTotal)}">${signedScore(score.schoolTotal)}</strong>` : "<strong>—</strong>";
   const sourceNote = sourceReady ? "" : `<div class="student-score-source-note">${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường; chưa thể xếp hạng." : "Đang đồng bộ điểm từ trường; xếp hạng sẽ xuất hiện khi hoàn tất."}</div>`;
-  return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Trường</small>${sourceScore}</span><span><small>Thủ công</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>${score.overrideTotal !== null ? `<span><small>Ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
+  const manualScore = hasManualAdjustment(score.manualTotal) ? `<span><small>Điều chỉnh</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>` : "";
+  return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Điểm trường</small>${sourceScore}</span>${manualScore}${score.overrideTotal !== null ? `<span><small>Điểm ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
 }
 async function setScoreOverride(studentId) {
   const score = leaderboardStudent(studentId); const raw = prompt("Nhập điểm cuối muốn ghi đè (có thể âm hoặc bằng 0):", String(score?.overrideTotal ?? score?.total ?? 0));
@@ -482,4 +574,4 @@ function closeDialogOnBackdrop(event) { if (event.target === event.currentTarget
 [$("adminDialog"), $("studentDialog")].forEach(dialog => dialog.addEventListener("click", closeDialogOnBackdrop));
 
 setInterval(() => { if (state.adminToken && !isAdmin()) { clearAdminSession(); setAdminUI(); } }, 60 * 1000);
-setAdminUI(); loadSchoolData();
+setAdminUI(); loadSchoolData(); loadIndividualSchoolData();
