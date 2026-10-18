@@ -64,6 +64,7 @@ function studentPublic(row) {
   return {
     id: row.id,
     fullName: row.full_name,
+    schoolName: row.school_name || row.full_name,
     groupNo: row.group_no,
     photoUrl: row.photo_key ? `/api/photos/${encodeURIComponent(row.photo_key)}` : null
   };
@@ -71,7 +72,7 @@ function studentPublic(row) {
 
 async function getStudents(env) {
   const { results } = await env.DB
-    .prepare("SELECT id, full_name, group_no, photo_key FROM students ORDER BY full_name COLLATE NOCASE")
+    .prepare("SELECT id, full_name, school_name, group_no, photo_key FROM students ORDER BY full_name COLLATE NOCASE")
     .all();
   return results.map(studentPublic);
 }
@@ -98,19 +99,26 @@ async function publicHandler(request, env, path) {
 
   if (request.method === "GET" && path[0] === "leaderboard") {
     const { results } = await env.DB.prepare(`
-      SELECT s.id, s.full_name, s.group_no, s.photo_key, COALESCE(SUM(e.delta), 0) AS total
+      SELECT s.id, s.full_name, s.school_name, s.group_no, s.photo_key,
+             COALESCE(SUM(e.delta), 0) AS manual_total,
+             o.final_score AS override_total, o.reason AS override_reason, o.updated_at AS override_updated_at
       FROM students s
       LEFT JOIN score_events e ON e.student_id = s.id
+      LEFT JOIN student_score_overrides o ON o.student_id = s.id
       GROUP BY s.id
-      ORDER BY total DESC, s.full_name COLLATE NOCASE
+      ORDER BY s.full_name COLLATE NOCASE
     `).all();
-    let rank = 0;
-    let previousTotal = null;
-    const students = results.map((row, index) => {
-      const total = Number(row.total);
-      if (index === 0 || total !== previousTotal) rank = index + 1;
-      previousTotal = total;
-      return { ...studentPublic(row), total, rank };
+    const students = results.map(row => {
+      const manualTotal = Number(row.manual_total || 0);
+      const overrideTotal = row.override_total === null || row.override_total === undefined ? null : Number(row.override_total);
+      return {
+        ...studentPublic(row),
+        manualTotal,
+        overrideTotal,
+        overrideReason: row.override_reason || "",
+        overrideUpdatedAt: row.override_updated_at || null,
+        total: manualTotal
+      };
     });
     return json({ students });
   }
@@ -158,9 +166,9 @@ async function adminHandler(request, env, path) {
     if (groupNo !== null && ![1, 2, 3, 4].includes(groupNo)) return fail("Tổ không hợp lệ.");
     const id = `hs-${crypto.randomUUID()}`;
     await env.DB.prepare(`
-      INSERT INTO students (id, full_name, group_no, created_at)
-      VALUES (?, ?, ?, ?)
-    `).bind(id, fullName, groupNo, new Date().toISOString()).run();
+      INSERT INTO students (id, full_name, school_name, group_no, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(id, fullName, fullName, groupNo, new Date().toISOString()).run();
     return json({ ok: true, id }, 201);
   }
 
@@ -208,6 +216,38 @@ async function adminHandler(request, env, path) {
     return json({ ok: true });
   }
 
+  if (request.method === "PUT" && path[1] === "students" && path[2] && path[3] === "score-override") {
+    const body = await request.json().catch(() => ({}));
+    const finalScore = Number(body.finalScore);
+    if (!Number.isFinite(finalScore) || Math.abs(finalScore) > 1000) return fail("Điểm ghi đè không hợp lệ.");
+    const student = await env.DB.prepare("SELECT id FROM students WHERE id = ?").bind(path[2]).first();
+    if (!student) return fail("Không tìm thấy học sinh.", 404);
+    await env.DB.prepare(`
+      INSERT INTO student_score_overrides (student_id, final_score, reason, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(student_id) DO UPDATE SET
+        final_score = excluded.final_score,
+        reason = excluded.reason,
+        updated_at = excluded.updated_at
+    `).bind(path[2], finalScore, String(body.reason || "").slice(0, 300), new Date().toISOString()).run();
+    return json({ ok: true });
+  }
+
+  if (request.method === "DELETE" && path[1] === "students" && path[2] && path[3] === "score-override") {
+    await env.DB.prepare("DELETE FROM student_score_overrides WHERE student_id = ?").bind(path[2]).run();
+    return new Response(null, { status: 204 });
+  }
+
+  if (request.method === "POST" && path[1] === "students" && path[2] && path[3] === "scores" && path[4] === "reset") {
+    const student = await env.DB.prepare("SELECT id FROM students WHERE id = ?").bind(path[2]).first();
+    if (!student) return fail("Không tìm thấy học sinh.", 404);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM score_events WHERE student_id = ?").bind(path[2]),
+      env.DB.prepare("DELETE FROM student_score_overrides WHERE student_id = ?").bind(path[2])
+    ]);
+    return json({ ok: true });
+  }
+
   if (request.method === "DELETE" && path[1] === "scores" && path[2]) {
     const result = await env.DB.prepare("DELETE FROM score_events WHERE id = ?").bind(path[2]).run();
     if (!result.meta.changes) return fail("Không tìm thấy lượt điểm.", 404);
@@ -223,26 +263,38 @@ async function adminHandler(request, env, path) {
       WHERE student_id = ?
       ORDER BY created_at DESC, id DESC
     `).bind(path[2]).all();
+    const override = await env.DB.prepare(`
+      SELECT final_score, reason, updated_at
+      FROM student_score_overrides
+      WHERE student_id = ?
+    `).bind(path[2]).first();
     return json({ events: results.map(row => ({
       id: row.id,
       delta: Number(row.delta),
       reason: row.reason,
       createdAt: row.created_at
-    })) });
+    })), override: override ? {
+      finalScore: Number(override.final_score),
+      reason: override.reason || "",
+      updatedAt: override.updated_at
+    } : null });
   }
 
   if (request.method === "PATCH" && path[1] === "students" && path[2]) {
     const body = await request.json().catch(() => ({}));
-    const student = await env.DB.prepare("SELECT id, full_name, group_no FROM students WHERE id = ?").bind(path[2]).first();
+    const student = await env.DB.prepare("SELECT id, full_name, school_name, group_no FROM students WHERE id = ?").bind(path[2]).first();
     if (!student) return fail("Không tìm thấy học sinh.", 404);
     const hasName = Object.prototype.hasOwnProperty.call(body, "fullName");
     const hasGroup = Object.prototype.hasOwnProperty.call(body, "groupNo");
-    if (!hasName && !hasGroup) return fail("Chưa có thay đổi để lưu.");
+    const hasSchoolName = Object.prototype.hasOwnProperty.call(body, "schoolName");
+    if (!hasName && !hasGroup && !hasSchoolName) return fail("Chưa có thay đổi để lưu.");
     const fullName = hasName ? String(body.fullName || "").trim().replace(/\s+/g, " ") : student.full_name;
     if (fullName.length < 2 || fullName.length > 100) return fail("Họ và tên không hợp lệ.");
+    const schoolName = hasSchoolName ? String(body.schoolName || "").trim().replace(/\s+/g, " ") : (student.school_name || student.full_name);
+    if (schoolName.length < 2 || schoolName.length > 100) return fail("Tên theo nguồn trường không hợp lệ.");
     const groupNo = hasGroup && (body.groupNo === null || body.groupNo === "") ? null : hasGroup ? Number(body.groupNo) : student.group_no;
     if (groupNo !== null && ![1, 2, 3, 4].includes(groupNo)) return fail("Tổ không hợp lệ.");
-    await env.DB.prepare("UPDATE students SET full_name = ?, group_no = ? WHERE id = ?").bind(fullName, groupNo, path[2]).run();
+    await env.DB.prepare("UPDATE students SET full_name = ?, school_name = ?, group_no = ? WHERE id = ?").bind(fullName, schoolName, groupNo, path[2]).run();
     return json({ ok: true });
   }
 
@@ -252,6 +304,7 @@ async function adminHandler(request, env, path) {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM seating WHERE student_id = ?").bind(path[2]),
       env.DB.prepare("DELETE FROM score_events WHERE student_id = ?").bind(path[2]),
+      env.DB.prepare("DELETE FROM student_score_overrides WHERE student_id = ?").bind(path[2]),
       env.DB.prepare("DELETE FROM students WHERE id = ?").bind(path[2])
     ]);
     if (student.photo_key) await env.PHOTOS.delete(student.photo_key);

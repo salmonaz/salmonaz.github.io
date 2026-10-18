@@ -3,7 +3,7 @@ const SCHOOL_API = Object.freeze({
   base: "https://firestore.googleapis.com/v1/projects/doanthptchuyenlequydon/databases/(default)/documents",
   apiKey: "AIzaSyBZjf4cej0daDmPiL5JhjH_bFX7kQpKX0w",
   classId: "MM2KGZwgLGLHDvod10ZW",
-  cacheKey: "thidua-11tin-public-v2", cacheMs: 5 * 60 * 1000
+  cacheKey: "thidua-11tin-public-v3", cacheMs: 5 * 60 * 1000
 });
 
 const $ = id => document.getElementById(id);
@@ -12,7 +12,11 @@ const state = {
   chart: null,
   records: [],
   students: [],
+  manualLeaderboard: [],
   leaderboard: [],
+  schoolRecordsState: "loading",
+  schoolEventsByStudent: new Map(),
+  unmatchedSchoolRecords: [],
   seating: {},
   adminToken: sessionStorage.getItem("11tin-admin-token") || "",
   adminExpiresAt: Number(sessionStorage.getItem("11tin-admin-expires-at") || 0),
@@ -57,6 +61,7 @@ function showView(name) {
   document.querySelectorAll(".app-tab").forEach(button => button.classList.toggle("active", button.dataset.viewTarget === name));
   if (name === "seating") state.seatMonth = monthNow();
   if (name === "seating" || name === "individual") loadClassData();
+  if (name === "individual") loadSchoolData(true);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll("[data-view-target]").forEach(element => element.addEventListener("click", event => { event.preventDefault(); showView(element.dataset.viewTarget); }));
@@ -125,15 +130,64 @@ function renderSchoolChart(weeks) {
   state.chart = new Chart($("scoreChart"), { type: "line", data: { labels: points.map(item => `Tuần ${item.week}`), datasets: [{ data: points.map(item => item.total), borderColor: "#55d6ff", backgroundColor: "rgba(85,214,255,.18)", borderWidth: 3, tension: .35, fill: true, pointRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: colors.text } }, y: { beginAtZero: true, ticks: { color: colors.text }, grid: { color: colors.grid } } } } });
 }
 function updateChartTheme() { if (!state.chart) return; const colors = chartColors(); state.chart.options.scales.x.ticks.color = colors.text; state.chart.options.scales.y.ticks.color = colors.text; state.chart.options.scales.y.grid.color = colors.grid; state.chart.update(); }
+function hasNumericScore(value) { return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)); }
+function scoreClass(value) { return !hasNumericScore(value) ? "" : Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : ""; }
+function signedScore(value) { return hasNumericScore(value) ? `${Number(value) > 0 ? "+" : ""}${formatNumber(value)}` : "—"; }
+function schoolRecordsAvailable() { return ["ready", "refreshing", "stale"].includes(state.schoolRecordsState); }
+function schoolPointData(students) {
+  const aliases = new Map(); const totals = new Map(); const events = new Map(); const unmatched = [];
+  students.forEach(student => {
+    totals.set(student.id, 0); events.set(student.id, []);
+    const key = normalizeSearchText(student.schoolName || student.fullName);
+    if (!key) return;
+    aliases.set(key, [...(aliases.get(key) || []), student.id]);
+  });
+  if (!schoolRecordsAvailable()) return { totals, events, unmatched };
+  state.records.forEach(record => {
+    const key = normalizeSearchText(record.hoTen); const score = Number(record.diem); const matches = aliases.get(key);
+    if (!key || !Number.isFinite(score)) return;
+    if (!matches || matches.length !== 1) { unmatched.push(record); return; }
+    const studentId = matches[0]; totals.set(studentId, totals.get(studentId) + score); events.get(studentId).push(record);
+  });
+  return { totals, events, unmatched };
+}
+function refreshLeaderboard() {
+  const sourceRows = state.manualLeaderboard || [];
+  if (!sourceRows.length) { state.leaderboard = []; return; }
+  const sourceReady = schoolRecordsAvailable(); const school = schoolPointData(sourceRows);
+  state.schoolEventsByStudent = school.events; state.unmatchedSchoolRecords = school.unmatched;
+  const rows = sourceRows.map(student => {
+    const schoolTotal = sourceReady ? school.totals.get(student.id) || 0 : null;
+    const manualTotal = Number(student.manualTotal ?? student.total ?? 0);
+    const overrideTotal = hasNumericScore(student.overrideTotal) ? Number(student.overrideTotal) : null;
+    const total = overrideTotal !== null ? overrideTotal : sourceReady ? schoolTotal + manualTotal : null;
+    return { ...student, schoolTotal, manualTotal, overrideTotal, total };
+  }).sort((left, right) => {
+    const leftScore = hasNumericScore(left.total) ? Number(left.total) : Number.NEGATIVE_INFINITY;
+    const rightScore = hasNumericScore(right.total) ? Number(right.total) : Number.NEGATIVE_INFINITY;
+    return rightScore - leftScore || left.fullName.localeCompare(right.fullName, "vi");
+  });
+  let rank = 0; let previous;
+  state.leaderboard = rows.map((student, index) => {
+    if (!hasNumericScore(student.total)) return { ...student, rank: null };
+    if (previous === undefined || student.total !== previous) rank = index + 1;
+    previous = student.total;
+    return { ...student, rank };
+  });
+}
 function renderSchoolRecords(records) {
   state.records = [...records].sort((a, b) => String(b.ngay || "").localeCompare(String(a.ngay || "")));
+  refreshLeaderboard();
   if (!state.records.length) { const message = "Nguồn chưa có nhật ký công khai của 11 Tin trong năm học này."; $("activityList").innerHTML = emptyState(message); return; }
   $("activityList").innerHTML = state.records.slice(0, 4).map(item => { const positive = Number(item.diem) >= 0; return `<div class="activity-item"><div class="activity-icon ${positive ? "success" : "warning"}"><i class="bi bi-${positive ? "plus-lg" : "exclamation-lg"}"></i></div><div class="activity-content"><div class="activity-top"><strong>${escapeHtml(item.tenLoi || "Sự kiện thi đua")}</strong><span>${escapeHtml(item.ngay || "—")}</span></div><p>${escapeHtml(item.hoTen || "Lớp 11 Tin")}${item.ghiChu ? ` · ${escapeHtml(item.ghiChu)}` : ""}</p></div><div class="activity-points ${positive ? "positive" : "negative"}">${positive ? "+" : ""}${formatNumber(item.diem)}</div></div>`; }).join("");
 }
 function sourceStatus(name, message) { $("sourceStatus").textContent = name; $("updatedAt").innerHTML = `<i class="bi bi-clock-history"></i> ${message}`; }
 async function loadSchoolData(force = false) {
-  try { sourceStatus("Đang tải", "Đang kết nối nguồn dữ liệu"); const cached = !force && getCachedSchoolData(); const data = cached || await getSchoolData(); if (!cached) cacheSchoolData(data); $("schoolYear").textContent = data.config.nienHoc || "Chưa xác định"; const hasEvents = Boolean(data.summary[SCHOOL_API.classId] && Object.keys(data.summary[SCHOOL_API.classId]).length); const updated = data.updatedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(data.updatedAt)) : "chưa có thời điểm"; sourceStatus(hasEvents ? "Đã đồng bộ" : "Chưa phát sinh điểm", `Cập nhật nguồn: ${updated}`); renderSchoolSummary(data); renderSchoolRecords(data.records); }
-  catch (error) { console.error(error); sourceStatus("Lỗi tải dữ liệu", "Không thể kết nối nguồn dữ liệu"); $("rankList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại."); $("activityList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại."); $("chartState").className = "data-state"; $("chartState").innerHTML = emptyState("Không thể tải biểu đồ."); }
+  const hadSchoolData = schoolRecordsAvailable();
+  state.schoolRecordsState = hadSchoolData ? "refreshing" : "loading";
+  refreshLeaderboard();
+  try { sourceStatus("Đang tải", "Đang kết nối nguồn dữ liệu"); const cached = !force && getCachedSchoolData(); const data = cached || await getSchoolData(); if (!cached) cacheSchoolData(data); state.schoolRecordsState = "ready"; $("schoolYear").textContent = data.config.nienHoc || "Chưa xác định"; const hasEvents = Boolean(data.summary[SCHOOL_API.classId] && Object.keys(data.summary[SCHOOL_API.classId]).length); const updated = data.updatedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(data.updatedAt)) : "chưa có thời điểm"; sourceStatus(hasEvents ? "Đã đồng bộ" : "Chưa phát sinh điểm", `Cập nhật nguồn: ${updated}`); renderSchoolSummary(data); renderSchoolRecords(data.records); if (state.manualLeaderboard.length) renderLeaderboard(); }
+  catch (error) { console.error(error); state.schoolRecordsState = hadSchoolData ? "stale" : "error"; refreshLeaderboard(); sourceStatus("Lỗi tải dữ liệu", hadSchoolData ? "Không thể làm mới nguồn dữ liệu" : "Không thể kết nối nguồn dữ liệu"); $("rankList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại."); $("activityList").innerHTML = emptyState("Không thể tải dữ liệu thi đua. Vui lòng thử lại."); $("chartState").className = "data-state"; $("chartState").innerHTML = emptyState("Không thể tải biểu đồ."); if (state.manualLeaderboard.length) renderLeaderboard(); }
 }
 $("retryBtn").addEventListener("click", () => loadSchoolData(true));
 
@@ -157,8 +211,8 @@ function setAdminUI() {
 async function loadClassData() {
   try {
     const [studentsPayload, seatingPayload, boardPayload] = await Promise.all([api("/students"), api(`/seating?month=${encodeURIComponent(state.seatMonth)}`), api("/leaderboard")]);
-    state.students = studentsPayload.students || []; state.seating = seatingPayload.assignments || {}; state.leaderboard = boardPayload.students || [];
-    setBackendProblem(false); renderSeating(); renderLeaderboard(); setAdminUI();
+    state.students = studentsPayload.students || []; state.seating = seatingPayload.assignments || {}; state.manualLeaderboard = boardPayload.students || [];
+    refreshLeaderboard(); setBackendProblem(false); renderSeating(); renderLeaderboard(); setAdminUI();
   } catch (error) { console.error(error); setBackendProblem(true); $("unseatedRoster").innerHTML = emptyState("Chưa thể tải dữ liệu lớp."); $("groupsGrid").innerHTML = emptyState("Chưa thể tải sơ đồ chỗ ngồi."); $("leaderboardRows").innerHTML = `<tr><td colspan="5">${emptyState("Chưa thể tải thi đua cá nhân.")}</td></tr>`; }
 }
 function photoMarkup(student) { return student.photoUrl ? `<img class="student-avatar" src="${escapeHtml(student.photoUrl)}" alt="Ảnh ${escapeHtml(student.fullName)}">` : `<span class="student-avatar">${escapeHtml(initials(student.fullName))}</span>`; }
@@ -228,31 +282,61 @@ async function saveSeating() { try { await api("/admin/seating", { method: "PUT"
 function autoSeat() { const seats = Array.from({ length: 4 }, (_, g) => Array.from({ length: 5 }, (_, d) => [seatId(g + 1, d + 1, 1), seatId(g + 1, d + 1, 2)])).flat(2); state.seating = {}; state.students.slice().sort((a, b) => a.fullName.localeCompare(b.fullName, "vi")).forEach((student, index) => { if (seats[index]) state.seating[seats[index]] = student.id; }); state.selectedStudentId = null; markSeatingDirty(); renderSeating(); }
 $("saveSeatsBtn").addEventListener("click", saveSeating); $("autoSeatBtn").addEventListener("click", autoSeat);
 
+function individualSourceText() {
+  const count = state.leaderboard.length;
+  if (state.schoolRecordsState === "loading") return `${count} học sinh · Đang đồng bộ điểm cá nhân từ trường…`;
+  if (state.schoolRecordsState === "error") return `${count} học sinh · Không thể đồng bộ điểm trường, nên chưa xếp hạng.`;
+  const source = state.schoolRecordsState === "refreshing" ? "Đang làm mới điểm trường" : state.schoolRecordsState === "stale" ? "Đang dùng lần đồng bộ trường gần nhất" : "Điểm trường đã đồng bộ";
+  const unmatched = state.unmatchedSchoolRecords.length ? ` · ${state.unmatchedSchoolRecords.length} bản ghi chưa ghép tên` : "";
+  return `${count} học sinh · ${source}; điểm thủ công là điều chỉnh riêng${unmatched}.`;
+}
+function studentSourceNote(student) {
+  if (!schoolRecordsAvailable()) return state.schoolRecordsState === "error" ? "Chưa tải được điểm trường" : "Đang đồng bộ điểm trường";
+  const pieces = [`Trường ${signedScore(student.schoolTotal)}`, `Thủ công ${signedScore(student.manualTotal)}`];
+  return student.overrideTotal !== null ? `Đang ghi đè · ${pieces.join(" · ")}` : pieces.join(" · ");
+}
 function renderLeaderboard() {
   const term = normalizeSearchText($("studentSearch").value.trim()); const rows = state.leaderboard.filter(student => normalizeSearchText(student.fullName).includes(term));
-  $("leaderboardInfo").textContent = `${state.leaderboard.length} học sinh · điểm được tính từ các lượt cộng/trừ đã lưu.`;
-  $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr><td><strong>${student.rank}</strong></td><td><button class="student-chip p-0" data-student-id="${student.id}">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo}` : "Chưa phân tổ"}</small></span></button></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${student.total > 0 ? "positive" : student.total < 0 ? "negative" : ""}">${student.total > 0 ? "+" : ""}${formatNumber(student.total)}</strong></td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="5">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
+  $("leaderboardInfo").textContent = individualSourceText();
+  $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr><td><strong>${student.rank ?? "—"}</strong></td><td><button class="student-chip p-0" data-student-id="${student.id}">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo} · ` : ""}${escapeHtml(studentSourceNote(student))}</small></span></button></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${scoreClass(student.total)}">${signedScore(student.total)}</strong>${student.overrideTotal !== null ? '<small class="score-value-note">Ghi đè</small>' : ""}</td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="5">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
   document.querySelectorAll("#leaderboardRows [data-student-id]").forEach(item => item.addEventListener("click", event => { const button = event.target.closest("[data-student-id]"); if (!button) return; if (button.dataset.score) { changeScore(button.dataset.studentId, button.dataset.score === "plus" ? 1 : -1); } else openStudent(button.dataset.studentId); }));
 }
 $("studentSearch").addEventListener("input", renderLeaderboard);
-async function changeScore(studentId, direction) { const student = findStudent(studentId); const raw = prompt(`${direction > 0 ? "Cộng" : "Trừ"} điểm cho ${student.fullName}. Nhập số điểm dương:`, "1"); if (raw === null) return; const amount = Number(raw); if (!Number.isFinite(amount) || amount <= 0) return alert("Điểm phải là một số dương."); const reason = prompt("Nội dung / lý do (không bắt buộc):", "") ?? ""; try { await api("/admin/scores", { method: "POST", body: JSON.stringify({ studentId, delta: direction * amount, reason }) }); await loadClassData(); } catch (error) { alert(error.message); } }
+async function changeScore(studentId, direction) {
+  const student = findStudent(studentId); if (!student) return;
+  const raw = prompt(`${direction > 0 ? "Cộng" : "Trừ"} điểm thủ công cho ${student.fullName}. Nhập số điểm dương:`, "1");
+  if (raw === null) return;
+  const amount = Number(raw); if (!Number.isFinite(amount) || amount <= 0) return alert("Điểm phải là một số dương.");
+  const reason = prompt("Nội dung / lý do (không bắt buộc):", "") ?? "";
+  const reopen = state.activeStudentId === studentId && $("studentDialog").open;
+  try {
+    await api("/admin/scores", { method: "POST", body: JSON.stringify({ studentId, delta: direction * amount, reason }) });
+    await loadClassData(); if (reopen) openStudent(studentId);
+  } catch (error) { alert(error.message); }
+}
 
 /* Student profile and photo / group tools */
-function studentScore(studentId) {
-  return Number(state.leaderboard.find(student => student.id === studentId)?.total || 0);
-}
+function leaderboardStudent(studentId) { return state.leaderboard.find(student => student.id === studentId); }
+function studentScore(studentId) { return leaderboardStudent(studentId)?.total ?? null; }
 function formatEventTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(date);
 }
-function renderScoreHistory(events) {
+function schoolHistoryMarkup(studentId) {
+  if (!schoolRecordsAvailable()) return `<div class="score-history-empty">${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường." : "Đang tải điểm từ trường…"}</div>`;
+  const events = state.schoolEventsByStudent.get(studentId) || [];
+  if (!events.length) return `<div class="score-history-empty">Chưa có bản ghi cá nhân từ trường.</div>`;
+  return events.map(event => `<div class="score-event school-event"><div><strong class="${scoreClass(event.diem)}">${signedScore(event.diem)}</strong><span>${escapeHtml(event.tenLoi || "Sự kiện thi đua")}</span><small>${escapeHtml(event.ngay || "—")}${event.tuan ? ` · Tuần ${escapeHtml(event.tuan)}` : ""}${event.ghiChu ? ` · ${escapeHtml(event.ghiChu)}` : ""}</small></div></div>`).join("");
+}
+function manualHistoryMarkup(events) {
+  if (!events.length) return `<div class="score-history-empty">Chưa có điều chỉnh thủ công.</div>`;
+  return events.map(event => `<div class="score-event"><div><strong class="${scoreClass(event.delta)}">${signedScore(event.delta)}</strong><span>${escapeHtml(event.reason || "Không ghi nội dung")}</span><small>${formatEventTime(event.createdAt)}</small></div><button class="remove-score-event" type="button" data-delete-score-id="${event.id}" aria-label="Xóa lượt điểm"><i class="bi bi-trash3"></i></button></div>`).join("");
+}
+function renderScoreHistory(events, student, override) {
   const container = $("studentScoreHistory");
   if (!container) return;
-  if (!events.length) {
-    container.innerHTML = `<div class="score-history-empty">Chưa có lượt cộng hoặc trừ điểm.</div>`;
-    return;
-  }
-  container.innerHTML = events.map(event => `<div class="score-event"><div><strong class="${event.delta > 0 ? "positive" : "negative"}">${event.delta > 0 ? "+" : ""}${formatNumber(event.delta)}</strong><span>${escapeHtml(event.reason || "Không ghi nội dung")}</span><small>${formatEventTime(event.createdAt)}</small></div><button class="remove-score-event" type="button" data-delete-score-id="${event.id}" aria-label="Xóa lượt điểm"><i class="bi bi-trash3"></i></button></div>`).join("");
+  const overrideNotice = override ? `<div class="score-override-notice"><i class="bi bi-pencil-square"></i><span>Đang ghi đè: <strong class="${scoreClass(override.finalScore)}">${signedScore(override.finalScore)}</strong>${override.reason ? ` · ${escapeHtml(override.reason)}` : ""}</span></div>` : "";
+  container.innerHTML = `<section class="score-history-section"><div class="history-heading"><strong>Điểm từ trường</strong><small>Đồng bộ từ nhật ký công khai</small></div>${schoolHistoryMarkup(student.id)}</section><section class="score-history-section"><div class="history-heading"><strong>Điều chỉnh thủ công</strong><small>Có thể xóa từng lượt nếu nhập nhầm.</small></div>${overrideNotice}${manualHistoryMarkup(events)}</section>`;
   container.querySelectorAll("[data-delete-score-id]").forEach(button => button.addEventListener("click", async () => {
     if (!confirm("Xóa lượt điểm này?")) return;
     try {
@@ -269,20 +353,43 @@ async function loadScoreHistory(studentId) {
   if (!container || !isAdmin()) return;
   try {
     const payload = await api(`/admin/students/${studentId}/scores`);
-    if (state.activeStudentId === studentId) renderScoreHistory(payload.events || []);
+    const student = findStudent(studentId);
+    if (state.activeStudentId === studentId && student) renderScoreHistory(payload.events || [], student, payload.override || null);
   } catch (error) {
     if (state.activeStudentId === studentId && $("studentScoreHistory")) {
       $("studentScoreHistory").innerHTML = `<div class="score-history-empty">Không thể tải lịch sử điểm.</div>`;
     }
   }
 }
+function scoreSummaryMarkup(score) {
+  if (!score || !schoolRecordsAvailable()) return `<div class="student-score-summary pending"><span>${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường." : "Đang đồng bộ điểm từ trường…"}</span></div>`;
+  return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Trường</small><strong class="${scoreClass(score.schoolTotal)}">${signedScore(score.schoolTotal)}</strong></span><span><small>Thủ công</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>${score.overrideTotal !== null ? `<span><small>Ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>`;
+}
+async function setScoreOverride(studentId) {
+  const score = leaderboardStudent(studentId); const raw = prompt("Nhập điểm cuối muốn ghi đè (có thể âm hoặc bằng 0):", String(score?.overrideTotal ?? score?.total ?? 0));
+  if (raw === null) return;
+  const finalScore = Number(raw); if (!Number.isFinite(finalScore) || Math.abs(finalScore) > 1000) return alert("Điểm không hợp lệ.");
+  const reason = prompt("Lý do ghi đè (không bắt buộc):", score?.overrideReason || "") ?? "";
+  try { await api(`/admin/students/${studentId}/score-override`, { method: "PUT", body: JSON.stringify({ finalScore, reason }) }); await loadClassData(); openStudent(studentId); }
+  catch (error) { alert(error.message); }
+}
+async function clearScoreOverride(studentId) {
+  if (!confirm("Bỏ điểm ghi đè? Điểm sẽ trở lại: điểm trường + điều chỉnh thủ công.")) return;
+  try { await api(`/admin/students/${studentId}/score-override`, { method: "DELETE" }); await loadClassData(); openStudent(studentId); }
+  catch (error) { alert(error.message); }
+}
+async function resetScoreToSchool(studentId) {
+  if (!confirm("Đặt lại điểm theo trường? Toàn bộ điều chỉnh thủ công và điểm ghi đè của học sinh này sẽ bị xóa.")) return;
+  try { await api(`/admin/students/${studentId}/scores/reset`, { method: "POST" }); await loadClassData(); openStudent(studentId); }
+  catch (error) { alert(error.message); }
+}
 function openStudent(studentId) {
   const student = findStudent(studentId);
   if (!student) return;
   state.activeStudentId = studentId;
-  const total = studentScore(studentId);
-  const adminTools = isAdmin() ? `<div class="student-detail-actions"><label>Họ và tên<input id="studentNameInput" value="${escapeHtml(student.fullName)}" maxlength="100"></label><label>Tổ<select id="groupSelect"><option value="">Chưa phân tổ</option>${[1, 2, 3, 4].map(group => `<option value="${group}" ${Number(student.groupNo) === group ? "selected" : ""}>Tổ ${group}</option>`).join("")}</select></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn"><i class="bi bi-image me-1"></i>Chọn ảnh<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div class="history-heading"><strong>Lịch sử điểm</strong><small>Có thể xóa từng lượt nếu nhập nhầm.</small></div><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
-  $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p>${student.groupNo ? `Tổ ${student.groupNo}` : "Chưa phân tổ"} · <strong class="${total > 0 ? "positive" : total < 0 ? "negative" : ""}">${total > 0 ? "+" : ""}${formatNumber(total)} điểm</strong></p></div>${adminTools}</div>`;
+  const score = leaderboardStudent(studentId); const total = studentScore(studentId);
+  const adminTools = isAdmin() ? `<section class="student-score-tools"><div><strong>Điểm thủ công</strong><small>Cộng/trừ là điều chỉnh riêng; ghi đè thay toàn bộ điểm hiển thị.</small></div><div class="student-score-tool-buttons"><button class="period-btn" type="button" id="manualPlusBtn"><i class="bi bi-plus-lg me-1"></i>Cộng điểm</button><button class="period-btn" type="button" id="manualMinusBtn"><i class="bi bi-dash-lg me-1"></i>Trừ điểm</button><button class="period-btn" type="button" id="setScoreOverrideBtn"><i class="bi bi-pencil-square me-1"></i>Ghi đè điểm</button>${score?.overrideTotal !== null && score?.overrideTotal !== undefined ? `<button class="period-btn" type="button" id="clearScoreOverrideBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ ghi đè</button>` : ""}<button class="period-btn danger-outline" type="button" id="resetScoreBtn"><i class="bi bi-arrow-repeat me-1"></i>Đặt lại theo trường</button></div></section><div class="student-detail-actions"><label>Họ và tên<input id="studentNameInput" value="${escapeHtml(student.fullName)}" maxlength="100"></label><label>Tên trên nguồn trường<input id="schoolNameInput" value="${escapeHtml(student.schoolName || student.fullName)}" maxlength="100"></label><label>Tổ<select id="groupSelect"><option value="">Chưa phân tổ</option>${[1, 2, 3, 4].map(group => `<option value="${group}" ${Number(student.groupNo) === group ? "selected" : ""}>Tổ ${group}</option>`).join("")}</select></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn"><i class="bi bi-image me-1"></i>Chọn ảnh<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
+  $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p>${student.groupNo ? `Tổ ${student.groupNo}` : "Chưa phân tổ"} · <strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></p>${scoreSummaryMarkup(score)}</div>${adminTools}</div>`;
   const dialog = $("studentDialog");
   if (!dialog.open) dialog.showModal();
   bindStudentDialog();
@@ -290,7 +397,12 @@ function openStudent(studentId) {
 }
 function bindStudentDialog() {
   $("studentDialog").querySelector("[data-close-dialog]")?.addEventListener("click", () => $("studentDialog").close());
-  $("saveStudentBtn")?.addEventListener("click", async () => { try { await api(`/admin/students/${state.activeStudentId}`, { method: "PATCH", body: JSON.stringify({ fullName: $("studentNameInput").value, groupNo: $("groupSelect").value || null }) }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
+  $("manualPlusBtn")?.addEventListener("click", () => changeScore(state.activeStudentId, 1));
+  $("manualMinusBtn")?.addEventListener("click", () => changeScore(state.activeStudentId, -1));
+  $("setScoreOverrideBtn")?.addEventListener("click", () => setScoreOverride(state.activeStudentId));
+  $("clearScoreOverrideBtn")?.addEventListener("click", () => clearScoreOverride(state.activeStudentId));
+  $("resetScoreBtn")?.addEventListener("click", () => resetScoreToSchool(state.activeStudentId));
+  $("saveStudentBtn")?.addEventListener("click", async () => { try { await api(`/admin/students/${state.activeStudentId}`, { method: "PATCH", body: JSON.stringify({ fullName: $("studentNameInput").value, schoolName: $("schoolNameInput").value, groupNo: $("groupSelect").value || null }) }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("photoInput")?.addEventListener("change", async event => { const file = event.target.files[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) return alert("Ảnh không được vượt quá 5 MB."); const form = new FormData(); form.append("photo", file); try { await api(`/admin/students/${state.activeStudentId}/photo`, { method: "POST", body: form }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("deletePhotoBtn")?.addEventListener("click", async () => { if (!confirm("Xóa ảnh của học sinh này?")) return; try { await api(`/admin/students/${state.activeStudentId}/photo`, { method: "DELETE" }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("deleteStudentBtn")?.addEventListener("click", async () => { const student = findStudent(state.activeStudentId); if (!student || !confirm(`Xóa ${student.fullName} khỏi danh sách lớp?`)) return; try { await api(`/admin/students/${state.activeStudentId}`, { method: "DELETE" }); $("studentDialog").close(); state.activeStudentId = null; await loadClassData(); } catch (error) { alert(error.message); } });
@@ -314,6 +426,8 @@ $("adminTriggerTwo").addEventListener("click", () => { clearTimeout(triggerTimer
 $("closeAdminDialog").addEventListener("click", () => $("adminDialog").close());
 $("adminForm").addEventListener("submit", async event => { event.preventDefault(); const password = $("adminPassword").value; const error = $("adminError"); try { const session = await api("/admin/session", { method: "POST", body: JSON.stringify({ password }) }); state.adminToken = session.token; state.adminExpiresAt = Number(session.expiresAt) || 0; sessionStorage.setItem("11tin-admin-token", session.token); sessionStorage.setItem("11tin-admin-expires-at", String(state.adminExpiresAt)); $("adminDialog").close(); setAdminUI(); await loadClassData(); } catch (cause) { error.textContent = cause.message || "Không thể xác minh mật khẩu."; error.classList.remove("d-none"); } });
 $("adminDialog").addEventListener("close", () => { $("adminPassword").value = ""; });
+function closeDialogOnBackdrop(event) { if (event.target === event.currentTarget) event.currentTarget.close(); }
+[$("adminDialog"), $("studentDialog")].forEach(dialog => dialog.addEventListener("click", closeDialogOnBackdrop));
 
 setInterval(() => { if (state.adminToken && !isAdmin()) { clearAdminSession(); setAdminUI(); } }, 60 * 1000);
 setAdminUI(); loadSchoolData();

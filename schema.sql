@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS students (
   id TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
+  school_name TEXT,
   group_no INTEGER CHECK (group_no BETWEEN 1 AND 4),
   photo_key TEXT,
   created_at TEXT NOT NULL
@@ -23,8 +24,16 @@ CREATE TABLE IF NOT EXISTS score_events (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS student_score_overrides (
+  student_id TEXT PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+  final_score REAL NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_seating_month ON seating(seat_month);
 CREATE INDEX IF NOT EXISTS idx_score_events_student ON score_events(student_id);
+CREATE INDEX IF NOT EXISTS idx_student_score_overrides_student ON student_score_overrides(student_id);
 
 INSERT OR IGNORE INTO students (id, full_name, created_at) VALUES
   ('hs-01', 'Bùi Việt Anh', datetime('now')),
@@ -63,3 +72,7 @@ INSERT OR IGNORE INTO students (id, full_name, created_at) VALUES
   ('hs-34', 'Đỗ Thanh Tùng', datetime('now')),
   ('hs-35', 'Tăng Nguyễn Minh Vân', datetime('now')),
   ('hs-36', 'Bùi Vũ Thảo Vy', datetime('now'));
+
+UPDATE students
+SET school_name = full_name
+WHERE school_name IS NULL OR TRIM(school_name) = '';

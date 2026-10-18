@@ -5,7 +5,7 @@ Sau khi làm xong các bước dưới đây, không cần sửa code để dùn
 - Xem thi đua lớp 11 Tin từ nguồn công khai của trường.
 - Lưu sơ đồ chỗ ngồi theo từng tháng.
 - Kéo thả trên máy tính hoặc chạm tên rồi chạm ghế trên điện thoại.
-- Đăng / xóa ảnh, cộng / trừ điểm, xem và xóa từng lượt điểm.
+- Đăng / xóa ảnh, cộng / trừ điểm, ghi đè hoặc đặt lại điểm cá nhân theo điểm trường.
 - Thêm, sửa tên hoặc xóa học sinh ngay trên website.
 
 Website phải chạy bằng Cloudflare Pages. URL GitHub Pages cũ chỉ chạy phần tĩnh,
@@ -28,6 +28,7 @@ Cách dễ nhất bằng GitHub Desktop:
 3. Ở tab Changes, kiểm tra có các file mới như:
    - functions/api/[[path]].js
    - schema.sql
+   - migrations/0002_individual_score_overrides.sql
    - _routes.json
    - HUONG_DAN_CLOUDFLARE.txt
 4. Viết Summary, ví dụ: "Thêm backend quản lý lớp 11 Tin".
@@ -52,6 +53,22 @@ một lần khi khởi tạo database mới. Sau đó quản lý danh sách tr�
 6. Vào R2 Object Storage > Create bucket.
 7. Đặt tên bucket: 11tin-student-photos
 8. Tạo bucket. Không cần tạo public bucket hay public URL.
+
+
+NÂNG CẤP DATABASE ĐÃ TẠO TRƯỚC ĐÓ
+----------------------------------
+
+Nếu database 11tin-class-data đã được tạo bằng phiên bản cũ của website,
+sau khi Push phiên bản mới này hãy mở D1 Console và chạy TOÀN BỘ file:
+
+   migrations/0002_individual_score_overrides.sql
+
+Chỉ chạy file nâng cấp này MỘT LẦN. File tạo phần ghi đè điểm và tên liên kết
+với nguồn trường. Không chạy lại schema.sql cho database đã dùng vì schema.sql
+có danh sách học sinh khởi tạo.
+
+Nếu bạn vừa tạo database mới ở bước 5 bên trên bằng schema.sql phiên bản mới,
+không cần chạy file nâng cấp này.
 
 
 PHẦN C — TẠO CLOUDFLARE PAGES
@@ -140,7 +157,8 @@ Thay <URL-PAGES> bằng URL .pages.dev của bạn:
 3. Mở trang chủ <URL-PAGES>.
    - Tab "Thi đua lớp" lấy dữ liệu công khai từ nguồn nhà trường.
    - Tab "Chỗ ngồi" hiển thị 4 tổ, mỗi tổ 5 bàn, mỗi bàn 2 chỗ.
-   - Tab "Thi đua cá nhân" hiển thị điểm đã được lưu.
+   - Tab "Thi đua cá nhân" tự đồng bộ điểm cá nhân từ nhật ký công khai của
+     trường, sau đó cộng điều chỉnh thủ công nếu có.
 
 4. Mở quản trị:
    - Nhấn đúng nút rất nhỏ ở góc phải dưới cùng.
@@ -153,8 +171,10 @@ Thay <URL-PAGES> bằng URL .pages.dev của bạn:
    - Trên điện thoại: chạm tên học sinh, rồi chạm ghế đích.
    - Nhấn "Lưu bố trí" trước khi rời trang.
    - Nhấn học sinh trong tab "Thi đua cá nhân" để sửa hồ sơ, thay ảnh hoặc xem
-     lịch sử điểm.
-   - Dùng nút + / − để thêm điểm; trong hồ sơ có thể xóa riêng một lượt điểm.
+     lịch sử điểm từ trường và các điều chỉnh thủ công.
+   - Dùng nút + / − để thêm điểm thủ công. Trong hồ sơ có thể ghi đè điểm cuối,
+     bỏ ghi đè, hoặc "Đặt lại theo trường" để xóa toàn bộ điểm thủ công và chỉ
+     dùng lại điểm từ trường.
 
 
 PHẦN F — SỬ DỤNG HẰNG NGÀY
@@ -162,8 +182,9 @@ PHẦN F — SỬ DỤNG HẰNG NGÀY
 
 - Dữ liệu thi đua lớp tự tải lại từ nguồn công khai của trường. Website có cache
   ngắn trong trình duyệt để giảm request; nhấn "Thử lại" để lấy dữ liệu mới ngay.
-- Chỗ ngồi được lưu riêng cho từng tháng. Chuyển ô Tháng để xem hoặc tạo sơ đồ
-  của tháng khác.
+- Tab Thi đua cá nhân cũng làm mới dữ liệu từ nguồn trường khi được mở. Các bản
+  ghi cấp lớp không có tên học sinh sẽ không bị tự chia cho từng học sinh.
+- Chỗ ngồi hiển thị bố trí hiện tại của lớp.
 - Tất cả thay đổi về chỗ ngồi, học sinh, ảnh và điểm được lưu vào Cloudflare,
   nên mọi thiết bị đều thấy bản mới sau khi tải lại trang.
 - Khi sau này có phiên bản code mới: Commit + Push origin trên GitHub Desktop.
