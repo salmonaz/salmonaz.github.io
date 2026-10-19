@@ -659,18 +659,21 @@ function scoreSummaryMarkup(score) {
   const manualScore = hasManualAdjustment(score.manualTotal) ? `<span><small>Điều chỉnh</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>` : "";
   return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Điểm</small>${sourceScore}</span>${manualScore}${score.overrideTotal !== null ? `<span><small>Điểm ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
 }
-function schoolDeductionTotal(studentId) {
-  if (!schoolRecordsAvailable()) return null;
-  return (state.schoolEventsByStudent.get(studentId) || []).reduce((total, event) => {
+function schoolDeductionEvents(studentId) {
+  if (!schoolRecordsAvailable()) return [];
+  return (state.schoolEventsByStudent.get(studentId) || []).filter(event => {
     const score = Number(event.diem);
-    return Number.isFinite(score) && score < 0 ? total + score : total;
-  }, 0);
+    return Number.isFinite(score) && score < 0;
+  });
 }
 function schoolDeductionMarkup(studentId) {
-  const total = schoolDeductionTotal(studentId);
-  return total !== null && total < 0
-    ? `<div class="student-deduction-note"><i class="bi bi-dash-circle-fill"></i><span>Điểm trừ từ trường</span><strong class="negative">${signedScore(total)} điểm</strong></div>`
-    : "";
+  const events = schoolDeductionEvents(studentId);
+  if (!events.length) return "";
+  const total = events.reduce((sum, event) => sum + Number(event.diem), 0);
+  return `<section class="student-deduction-details"><div class="student-deduction-note"><i class="bi bi-dash-circle-fill"></i><span>Chi tiết điểm trừ từ trường</span><strong class="negative">${signedScore(total)} điểm</strong></div><div class="deduction-events">${events.map(event => {
+    const meta = [event.ngay, event.tuan ? `Tuần ${event.tuan}` : ""].filter(Boolean).map(value => escapeHtml(value)).join(" · ");
+    return `<article class="deduction-event"><strong class="deduction-event-points negative">${signedScore(event.diem)} điểm</strong><div><strong class="deduction-event-reason">${escapeHtml(event.tenLoi || "Không có lý do trên nguồn trường")}</strong>${meta ? `<small class="deduction-event-meta">${meta}</small>` : ""}${event.ghiChu ? `<p class="deduction-event-note">${escapeHtml(event.ghiChu)}</p>` : ""}</div></article>`;
+  }).join("")}</div></section>`;
 }
 async function setScoreOverride(studentId) {
   const score = leaderboardStudent(studentId); const raw = prompt("Nhập điểm cuối muốn ghi đè (có thể âm hoặc bằng 0):", String(score?.overrideTotal ?? score?.total ?? 0));
