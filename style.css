@@ -484,6 +484,8 @@ a{text-decoration:none;color:inherit}
 }
 .table-custom tbody tr{transition:.22s ease}
 .table-custom tbody tr:hover{background:rgba(127,160,195,.045)}
+.table-custom tbody td.leaderboard-profile-cell{padding:0!important}
+.leaderboard-profile-trigger{min-height:64px;padding:10px 12px!important;border-radius:0!important}
 .person-cell{display:flex;align-items:center;gap:10px}
 .person-cell strong{display:block;color:var(--text);font-size:12px}
 .person-cell small{display:block;color:var(--muted);font-size:9px;margin-top:2px}
