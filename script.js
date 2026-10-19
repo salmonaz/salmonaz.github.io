@@ -192,6 +192,17 @@ function scoreClass(value) { return !hasNumericScore(value) ? "" : Number(value)
 function signedScore(value) { return hasNumericScore(value) ? `${Number(value) > 0 ? "+" : ""}${formatNumber(value)}` : "—"; }
 function hasManualAdjustment(value) { return hasNumericScore(value) && Number(value) !== 0; }
 const studentNameCollator = new Intl.Collator("vi", { sensitivity: "base", numeric: true });
+function studentNameParts(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  return { given: parts.at(-1) || "", middle: parts.length > 2 ? parts.slice(1, -1).join(" ") : "", family: parts.length > 1 ? parts[0] : "" };
+}
+function compareStudentNames(left, right) {
+  const leftParts = studentNameParts(left.fullName); const rightParts = studentNameParts(right.fullName);
+  return studentNameCollator.compare(leftParts.given, rightParts.given)
+    || studentNameCollator.compare(leftParts.middle, rightParts.middle)
+    || studentNameCollator.compare(leftParts.family, rightParts.family)
+    || studentNameCollator.compare(String(left.fullName || ""), String(right.fullName || ""));
+}
 function compareStudentScores(left, right, direction = "desc") {
   const leftScore = hasNumericScore(left.total) ? Number(left.total) : null;
   const rightScore = hasNumericScore(right.total) ? Number(right.total) : null;
@@ -202,7 +213,7 @@ function compareStudentScores(left, right, direction = "desc") {
   return direction === "asc" ? difference : -difference;
 }
 function compareLeaderboardStudents(left, right, sort = "score-desc") {
-  const byName = studentNameCollator.compare(left.fullName, right.fullName);
+  const byName = compareStudentNames(left, right);
   const byId = String(left.id).localeCompare(String(right.id));
   if (sort === "name-asc") return byName || compareStudentScores(left, right) || byId;
   if (sort === "name-desc") return -byName || compareStudentScores(left, right) || byId;
