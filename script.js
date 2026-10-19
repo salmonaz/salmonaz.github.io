@@ -670,7 +670,7 @@ function schoolDeductionMarkup(studentId) {
   const events = schoolDeductionEvents(studentId);
   if (!events.length) return "";
   const total = events.reduce((sum, event) => sum + Number(event.diem), 0);
-  return `<section class="student-deduction-details"><div class="student-deduction-note"><i class="bi bi-dash-circle-fill"></i><span>Chi tiết điểm trừ từ trường</span><strong class="negative">${signedScore(total)} điểm</strong></div><div class="deduction-events">${events.map(event => {
+  return `<section class="student-deduction-details"><div class="student-deduction-note"><i class="bi bi-dash-circle-fill"></i><span>Chi tiết điểm trừ</span><strong class="negative">${signedScore(total)} điểm</strong></div><div class="deduction-events">${events.map(event => {
     const meta = [event.ngay, event.tuan ? `Tuần ${event.tuan}` : ""].filter(Boolean).map(value => escapeHtml(value)).join(" · ");
     return `<article class="deduction-event"><strong class="deduction-event-points negative">${signedScore(event.diem)} điểm</strong><div><strong class="deduction-event-reason">${escapeHtml(event.tenLoi || "Không có lý do trên nguồn trường")}</strong>${meta ? `<small class="deduction-event-meta">${meta}</small>` : ""}${event.ghiChu ? `<p class="deduction-event-note">${escapeHtml(event.ghiChu)}</p>` : ""}</div></article>`;
   }).join("")}</div></section>`;
