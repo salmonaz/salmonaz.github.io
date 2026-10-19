@@ -190,6 +190,24 @@ function hasNumericScore(value) { return value !== null && value !== undefined &
 function scoreClass(value) { return !hasNumericScore(value) ? "" : Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : ""; }
 function signedScore(value) { return hasNumericScore(value) ? `${Number(value) > 0 ? "+" : ""}${formatNumber(value)}` : "—"; }
 function hasManualAdjustment(value) { return hasNumericScore(value) && Number(value) !== 0; }
+const studentNameCollator = new Intl.Collator("vi", { sensitivity: "base", numeric: true });
+function compareStudentScores(left, right, direction = "desc") {
+  const leftScore = hasNumericScore(left.total) ? Number(left.total) : null;
+  const rightScore = hasNumericScore(right.total) ? Number(right.total) : null;
+  if (leftScore === null && rightScore === null) return 0;
+  if (leftScore === null) return 1;
+  if (rightScore === null) return -1;
+  const difference = leftScore - rightScore;
+  return direction === "asc" ? difference : -difference;
+}
+function compareLeaderboardStudents(left, right, sort = "score-desc") {
+  const byName = studentNameCollator.compare(left.fullName, right.fullName);
+  const byId = String(left.id).localeCompare(String(right.id));
+  if (sort === "name-asc") return byName || compareStudentScores(left, right) || byId;
+  if (sort === "name-desc") return -byName || compareStudentScores(left, right) || byId;
+  const byScore = compareStudentScores(left, right, sort === "score-asc" ? "asc" : "desc");
+  return byScore || byName || byId;
+}
 function schoolRecordsAvailable() { return ["ready", "refreshing", "stale"].includes(state.schoolRecordsState); }
 function schoolPointData(students) {
   const aliases = new Map(); const totals = new Map(); const events = new Map(); const unmatched = [];
@@ -219,18 +237,8 @@ function refreshLeaderboard() {
     const overrideTotal = hasNumericScore(student.overrideTotal) ? Number(student.overrideTotal) : null;
     const total = overrideTotal !== null ? overrideTotal : sourceReady ? schoolTotal + manualTotal : null;
     return { ...student, schoolTotal, manualTotal, overrideTotal, total };
-  }).sort((left, right) => {
-    const leftScore = hasNumericScore(left.total) ? Number(left.total) : Number.NEGATIVE_INFINITY;
-    const rightScore = hasNumericScore(right.total) ? Number(right.total) : Number.NEGATIVE_INFINITY;
-    return rightScore - leftScore || left.fullName.localeCompare(right.fullName, "vi");
-  });
-  let rank = 0; let previous;
-  state.leaderboard = rows.map((student, index) => {
-    if (!sourceReady || !hasNumericScore(student.total)) return { ...student, rank: null };
-    if (previous === undefined || student.total !== previous) rank = index + 1;
-    previous = student.total;
-    return { ...student, rank };
-  });
+  }).sort((left, right) => compareLeaderboardStudents(left, right));
+  state.leaderboard = rows;
 }
 function renderSchoolRecords(records) {
   state.records = [...records].sort((a, b) => String(b.ngay || "").localeCompare(String(a.ngay || "")));
@@ -383,7 +391,7 @@ async function loadClassData() {
     const [studentsPayload, seatingPayload, boardPayload] = await Promise.all([api("/students"), api(`/seating?month=${encodeURIComponent(state.seatMonth)}`), api("/leaderboard")]);
     state.students = studentsPayload.students || []; state.seating = seatingPayload.assignments || {}; state.groupLayout = groupLayoutOrDefault(seatingPayload.groupLayout); state.manualLeaderboard = boardPayload.students || [];
     refreshLeaderboard(); setBackendProblem(false); renderSeating(); renderLeaderboard(); setAdminUI();
-  } catch (error) { console.error(error); setBackendProblem(true); $("unseatedRoster").innerHTML = emptyState("Chưa thể tải dữ liệu lớp."); $("groupsGrid").innerHTML = emptyState("Chưa thể tải sơ đồ chỗ ngồi."); $("leaderboardRows").innerHTML = `<tr><td colspan="5">${emptyState("Chưa thể tải thi đua cá nhân.")}</td></tr>`; }
+  } catch (error) { console.error(error); setBackendProblem(true); $("unseatedRoster").innerHTML = emptyState("Chưa thể tải dữ liệu lớp."); $("groupsGrid").innerHTML = emptyState("Chưa thể tải sơ đồ chỗ ngồi."); $("leaderboardRows").innerHTML = `<tr><td colspan="4">${emptyState("Chưa thể tải thi đua cá nhân.")}</td></tr>`; }
 }
 function photoMarkup(student) { return student.photoUrl ? `<img class="student-avatar" src="${escapeHtml(student.photoUrl)}" alt="Ảnh ${escapeHtml(student.fullName)}">` : `<span class="student-avatar">${escapeHtml(initials(student.fullName))}</span>`; }
 function findStudent(id) { return state.students.find(student => student.id === id); }
@@ -539,7 +547,7 @@ $("seatingSearch").addEventListener("input", renderSeating);
 function individualSourceText() {
   const count = state.leaderboard.length;
   if (state.schoolRecordsState === "loading") return `${count} học sinh · Đang đồng bộ điểm cá nhân từ trường…`;
-  if (state.schoolRecordsState === "error") return `${count} học sinh · Không thể đồng bộ điểm trường, nên chưa xếp hạng.`;
+  if (state.schoolRecordsState === "error") return `${count} học sinh · Không thể đồng bộ điểm trường, nên chưa thể hiển thị điểm.`;
   const source = state.schoolRecordsState === "refreshing" ? "Đang làm mới điểm trường" : state.schoolRecordsState === "stale" ? "Đang dùng lần đồng bộ trường gần nhất" : "Điểm trường đã đồng bộ";
   const unmatched = state.unmatchedSchoolRecords.length ? ` · ${state.unmatchedSchoolRecords.length} bản ghi chưa ghép tên` : "";
   return `${count} học sinh · ${source}${unmatched}.`;
@@ -551,12 +559,14 @@ function studentSourceNote(student) {
   return student.overrideTotal !== null ? `Đang ghi đè · ${pieces.join(" · ")}` : pieces.join(" · ");
 }
 function renderLeaderboard() {
-  const term = normalizeSearchText($("studentSearch").value.trim()); const rows = state.leaderboard.filter(student => normalizeSearchText(student.fullName).includes(term));
+  const term = normalizeSearchText($("studentSearch").value.trim()); const sort = $("leaderboardSort").value;
+  const rows = state.leaderboard.filter(student => normalizeSearchText(student.fullName).includes(term)).slice().sort((left, right) => compareLeaderboardStudents(left, right, sort));
   $("leaderboardInfo").textContent = individualSourceText();
-  $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr><td><strong>${student.rank ?? "—"}</strong></td><td><button class="student-chip p-0" data-student-id="${student.id}">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo} · ` : ""}${escapeHtml(studentSourceNote(student))}</small></span></button></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${scoreClass(student.total)}">${signedScore(student.total)}</strong>${student.overrideTotal !== null ? '<small class="score-value-note">Ghi đè</small>' : ""}</td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="5">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
+  $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr><td><button class="student-chip p-0" data-student-id="${student.id}">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo} · ` : ""}${escapeHtml(studentSourceNote(student))}</small></span></button></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${scoreClass(student.total)}">${signedScore(student.total)}</strong>${student.overrideTotal !== null ? '<small class="score-value-note">Ghi đè</small>' : ""}</td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="4">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
   document.querySelectorAll("#leaderboardRows [data-student-id]").forEach(item => item.addEventListener("click", event => { const button = event.target.closest("[data-student-id]"); if (!button) return; if (button.dataset.score) { changeScore(button.dataset.studentId, button.dataset.score === "plus" ? 1 : -1); } else openStudent(button.dataset.studentId); }));
 }
 $("studentSearch").addEventListener("input", renderLeaderboard);
+$("leaderboardSort").addEventListener("change", renderLeaderboard);
 async function changeScore(studentId, direction) {
   const student = findStudent(studentId); if (!student) return;
   const raw = prompt(`${direction > 0 ? "Cộng" : "Trừ"} điểm thủ công cho ${student.fullName}. Nhập số điểm dương:`, "1");
@@ -620,7 +630,7 @@ function scoreSummaryMarkup(score) {
   if (!score) return `<div class="student-score-summary pending"><span>Đang đồng bộ điểm từ trường…</span></div>`;
   const sourceReady = schoolRecordsAvailable();
   const sourceScore = sourceReady ? `<strong class="${scoreClass(score.schoolTotal)}">${signedScore(score.schoolTotal)}</strong>` : "<strong>—</strong>";
-  const sourceNote = sourceReady ? "" : `<div class="student-score-source-note">${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường; chưa thể xếp hạng." : "Đang đồng bộ điểm từ trường; xếp hạng sẽ xuất hiện khi hoàn tất."}</div>`;
+  const sourceNote = sourceReady ? "" : `<div class="student-score-source-note">${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường; chưa thể hiển thị điểm." : "Đang đồng bộ điểm từ trường; điểm sẽ xuất hiện khi hoàn tất."}</div>`;
   const manualScore = hasManualAdjustment(score.manualTotal) ? `<span><small>Điều chỉnh</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>` : "";
   return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Điểm</small>${sourceScore}</span>${manualScore}${score.overrideTotal !== null ? `<span><small>Điểm ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
 }
