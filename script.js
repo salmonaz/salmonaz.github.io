@@ -25,6 +25,7 @@ const state = {
   students: [],
   manualLeaderboard: [],
   leaderboard: [],
+  individualSort: "score-desc",
   schoolRecordsState: "loading",
   schoolSummaryState: "loading",
   schoolSummaryPromise: null,
@@ -559,14 +560,27 @@ function studentSourceNote(student) {
   return student.overrideTotal !== null ? `Đang ghi đè · ${pieces.join(" · ")}` : pieces.join(" · ");
 }
 function renderLeaderboard() {
-  const term = normalizeSearchText($("studentSearch").value.trim()); const sort = $("leaderboardSort").value;
-  const rows = state.leaderboard.filter(student => normalizeSearchText(student.fullName).includes(term)).slice().sort((left, right) => compareLeaderboardStudents(left, right, sort));
+  const term = normalizeSearchText($("studentSearch").value.trim());
+  const rows = state.leaderboard.filter(student => normalizeSearchText(student.fullName).includes(term)).slice().sort((left, right) => compareLeaderboardStudents(left, right, state.individualSort));
   $("leaderboardInfo").textContent = individualSourceText();
   $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr><td><button class="student-chip p-0" data-student-id="${student.id}">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo} · ` : ""}${escapeHtml(studentSourceNote(student))}</small></span></button></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${scoreClass(student.total)}">${signedScore(student.total)}</strong>${student.overrideTotal !== null ? '<small class="score-value-note">Ghi đè</small>' : ""}</td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="4">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
   document.querySelectorAll("#leaderboardRows [data-student-id]").forEach(item => item.addEventListener("click", event => { const button = event.target.closest("[data-student-id]"); if (!button) return; if (button.dataset.score) { changeScore(button.dataset.studentId, button.dataset.score === "plus" ? 1 : -1); } else openStudent(button.dataset.studentId); }));
 }
 $("studentSearch").addEventListener("input", renderLeaderboard);
-$("leaderboardSort").addEventListener("change", renderLeaderboard);
+function setLeaderboardSortMenuOpen(open) {
+  const menu = $("leaderboardSortToggle").closest(".sort-menu"); const options = $("leaderboardSortOptions");
+  menu.classList.toggle("is-open", open); $("leaderboardSortToggle").setAttribute("aria-expanded", String(open)); options.setAttribute("aria-hidden", String(!open)); options.inert = !open;
+}
+function setLeaderboardSort(value) {
+  const option = document.querySelector(`#leaderboardSortOptions [data-sort-value="${value}"]`); if (!option) return;
+  state.individualSort = value; $("leaderboardSortLabel").textContent = option.textContent;
+  document.querySelectorAll("#leaderboardSortOptions [data-sort-value]").forEach(item => { const selected = item === option; item.classList.toggle("is-selected", selected); item.setAttribute("aria-selected", String(selected)); });
+  setLeaderboardSortMenuOpen(false); renderLeaderboard();
+}
+$("leaderboardSortToggle").addEventListener("click", () => setLeaderboardSortMenuOpen(!$("leaderboardSortToggle").closest(".sort-menu").classList.contains("is-open")));
+document.querySelectorAll("#leaderboardSortOptions [data-sort-value]").forEach(option => option.addEventListener("click", () => setLeaderboardSort(option.dataset.sortValue)));
+document.addEventListener("click", event => { if (!event.target.closest(".sort-menu")) setLeaderboardSortMenuOpen(false); });
+document.addEventListener("keydown", event => { if (event.key === "Escape") setLeaderboardSortMenuOpen(false); });
 async function changeScore(studentId, direction) {
   const student = findStudent(studentId); if (!student) return;
   const raw = prompt(`${direction > 0 ? "Cộng" : "Trừ"} điểm thủ công cho ${student.fullName}. Nhập số điểm dương:`, "1");
