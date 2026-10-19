@@ -698,8 +698,8 @@ function canvasToWebp(canvas, quality) {
 async function croppedPhotoBlob(crop) {
   const sourceWidth = crop.viewportWidth / crop.scale;
   const sourceHeight = crop.viewportHeight / crop.scale;
-  const sourceX = Math.min(Math.max(0, -crop.x / crop.scale), crop.naturalWidth - sourceWidth);
-  const sourceY = Math.min(Math.max(0, -crop.y / crop.scale), crop.naturalHeight - sourceHeight);
+  const sourceX = Math.min(Math.max(0, -crop.x / crop.scale), Math.max(0, crop.naturalWidth - sourceWidth));
+  const sourceY = Math.min(Math.max(0, -crop.y / crop.scale), Math.max(0, crop.naturalHeight - sourceHeight));
   const canvas = document.createElement("canvas");
   canvas.width = PHOTO_OUTPUT_SIZE;
   canvas.height = PHOTO_OUTPUT_SIZE;
@@ -771,6 +771,7 @@ function openPhotoCropEditor(file) {
   viewport.addEventListener("pointercancel", finishPointer);
   zoom.addEventListener("input", () => { if (crop.ready) setPhotoCropZoom(crop, Number(zoom.value)); });
   $("photoCropReset")?.addEventListener("click", () => {
+    if (!crop.ready) return;
     crop.zoom = 1;
     zoom.value = "1";
     syncPhotoCropViewport(crop);
