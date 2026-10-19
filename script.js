@@ -659,6 +659,19 @@ function scoreSummaryMarkup(score) {
   const manualScore = hasManualAdjustment(score.manualTotal) ? `<span><small>Điều chỉnh</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>` : "";
   return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Điểm</small>${sourceScore}</span>${manualScore}${score.overrideTotal !== null ? `<span><small>Điểm ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
 }
+function schoolDeductionTotal(studentId) {
+  if (!schoolRecordsAvailable()) return null;
+  return (state.schoolEventsByStudent.get(studentId) || []).reduce((total, event) => {
+    const score = Number(event.diem);
+    return Number.isFinite(score) && score < 0 ? total + score : total;
+  }, 0);
+}
+function schoolDeductionMarkup(studentId) {
+  const total = schoolDeductionTotal(studentId);
+  return total !== null && total < 0
+    ? `<div class="student-deduction-note"><i class="bi bi-dash-circle-fill"></i><span>Điểm trừ từ trường</span><strong class="negative">${signedScore(total)} điểm</strong></div>`
+    : "";
+}
 async function setScoreOverride(studentId) {
   const score = leaderboardStudent(studentId); const raw = prompt("Nhập điểm cuối muốn ghi đè (có thể âm hoặc bằng 0):", String(score?.overrideTotal ?? score?.total ?? 0));
   if (raw === null) return;
@@ -860,7 +873,7 @@ function openStudent(studentId) {
   const score = leaderboardStudent(studentId); const total = studentScore(studentId);
   const groupLabel = studentGroupLabel(student);
   const adminTools = isAdmin() ? `<section class="student-score-tools"><div><strong>Điểm thủ công</strong><small>Cộng/trừ là điều chỉnh riêng; ghi đè thay toàn bộ điểm hiển thị.</small></div><div class="student-score-tool-buttons"><button class="period-btn" type="button" id="manualPlusBtn"><i class="bi bi-plus-lg me-1"></i>Cộng điểm</button><button class="period-btn" type="button" id="manualMinusBtn"><i class="bi bi-dash-lg me-1"></i>Trừ điểm</button><button class="period-btn" type="button" id="setScoreOverrideBtn"><i class="bi bi-pencil-square me-1"></i>Ghi đè điểm</button>${score?.overrideTotal !== null && score?.overrideTotal !== undefined ? `<button class="period-btn" type="button" id="clearScoreOverrideBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ ghi đè</button>` : ""}<button class="period-btn danger-outline" type="button" id="resetScoreBtn"><i class="bi bi-arrow-repeat me-1"></i>Đặt lại theo trường</button></div></section><div class="student-detail-actions"><label>Tên trên nguồn trường<input id="schoolNameInput" value="${escapeHtml(student.schoolName || student.fullName)}" maxlength="100"></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn" title="GIF được giữ nguyên hiệu ứng động"><i class="bi bi-image me-1"></i>Chọn ảnh/GIF<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
-  $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p>${groupLabel ? `${escapeHtml(groupLabel)} · ` : ""}<strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></p>${scoreSummaryMarkup(score)}</div>${adminTools}</div>`;
+  $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p>${groupLabel ? `${escapeHtml(groupLabel)} · ` : ""}<strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></p>${scoreSummaryMarkup(score)}${schoolDeductionMarkup(studentId)}</div>${adminTools}</div>`;
   const dialog = $("studentDialog");
   if (!dialog.open) dialog.showModal();
   bindStudentDialog();
