@@ -642,9 +642,168 @@ async function resetScoreToSchool(studentId) {
   try { await api(`/admin/students/${studentId}/scores/reset`, { method: "POST" }); await loadClassData(); openStudent(studentId); }
   catch (error) { alert(error.message); }
 }
+
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PHOTO_MAX_SOURCE_BYTES = 20 * 1024 * 1024;
+const PHOTO_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const PHOTO_OUTPUT_SIZE = 900;
+let photoCropState = null;
+
+function discardPhotoCropEditor() {
+  const crop = photoCropState;
+  if (crop?.objectUrl) URL.revokeObjectURL(crop.objectUrl);
+  if (crop?.onResize) window.removeEventListener("resize", crop.onResize);
+  photoCropState = null;
+  $("photoCropEditor")?.remove();
+}
+function clampPhotoCrop(crop) {
+  const minX = Math.min(0, crop.viewportWidth - crop.naturalWidth * crop.scale);
+  const minY = Math.min(0, crop.viewportHeight - crop.naturalHeight * crop.scale);
+  crop.x = Math.min(0, Math.max(minX, crop.x));
+  crop.y = Math.min(0, Math.max(minY, crop.y));
+}
+function renderPhotoCrop(crop) {
+  crop.image.style.width = `${crop.naturalWidth * crop.scale}px`;
+  crop.image.style.height = `${crop.naturalHeight * crop.scale}px`;
+  crop.image.style.transform = `translate3d(${crop.x}px, ${crop.y}px, 0)`;
+}
+function syncPhotoCropViewport(crop, preserveFocus = false) {
+  const width = crop.viewport.clientWidth;
+  const height = crop.viewport.clientHeight;
+  if (!width || !height) return;
+  const focusX = preserveFocus && crop.scale ? (crop.viewportWidth / 2 - crop.x) / crop.scale : crop.naturalWidth / 2;
+  const focusY = preserveFocus && crop.scale ? (crop.viewportHeight / 2 - crop.y) / crop.scale : crop.naturalHeight / 2;
+  crop.viewportWidth = width;
+  crop.viewportHeight = height;
+  crop.baseScale = Math.max(width / crop.naturalWidth, height / crop.naturalHeight);
+  crop.scale = crop.baseScale * crop.zoom;
+  crop.x = width / 2 - focusX * crop.scale;
+  crop.y = height / 2 - focusY * crop.scale;
+  clampPhotoCrop(crop);
+  renderPhotoCrop(crop);
+}
+function setPhotoCropZoom(crop, zoom) {
+  const focusX = (crop.viewportWidth / 2 - crop.x) / crop.scale;
+  const focusY = (crop.viewportHeight / 2 - crop.y) / crop.scale;
+  crop.zoom = Math.min(3, Math.max(1, zoom));
+  crop.scale = crop.baseScale * crop.zoom;
+  crop.x = crop.viewportWidth / 2 - focusX * crop.scale;
+  crop.y = crop.viewportHeight / 2 - focusY * crop.scale;
+  clampPhotoCrop(crop);
+  renderPhotoCrop(crop);
+}
+function canvasToWebp(canvas, quality) {
+  return new Promise(resolve => canvas.toBlob(resolve, "image/webp", quality));
+}
+async function croppedPhotoBlob(crop) {
+  const sourceWidth = crop.viewportWidth / crop.scale;
+  const sourceHeight = crop.viewportHeight / crop.scale;
+  const sourceX = Math.min(Math.max(0, -crop.x / crop.scale), crop.naturalWidth - sourceWidth);
+  const sourceY = Math.min(Math.max(0, -crop.y / crop.scale), crop.naturalHeight - sourceHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = PHOTO_OUTPUT_SIZE;
+  canvas.height = PHOTO_OUTPUT_SIZE;
+  const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(crop.image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, PHOTO_OUTPUT_SIZE, PHOTO_OUTPUT_SIZE);
+  let photo = await canvasToWebp(canvas, .9);
+  if (!photo || photo.size > PHOTO_MAX_UPLOAD_BYTES) photo = await canvasToWebp(canvas, .72);
+  if (!photo || photo.size > PHOTO_MAX_UPLOAD_BYTES) throw new Error("Không thể nén ảnh xuống dưới 5 MB.");
+  return photo;
+}
+async function uploadCroppedPhoto(studentId, photo) {
+  const form = new FormData();
+  form.append("photo", photo, "anh-dai-dien.webp");
+  await api(`/admin/students/${studentId}/photo`, { method: "POST", body: form });
+}
+function openPhotoCropEditor(file) {
+  if (!PHOTO_TYPES.has(file.type)) return alert("Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.");
+  if (file.size > PHOTO_MAX_SOURCE_BYTES) return alert("Ảnh gốc không được vượt quá 20 MB.");
+  const actions = document.querySelector("#studentDialogContent .student-detail-actions");
+  const studentId = state.activeStudentId;
+  if (!actions || !studentId) return;
+  discardPhotoCropEditor();
+  actions.insertAdjacentHTML("afterend", `<section class="photo-crop-editor" id="photoCropEditor"><div class="photo-crop-head"><div><strong>Căn ảnh đại diện</strong><small>Kéo ảnh để căn vị trí, dùng thanh bên dưới để phóng to.</small></div><button class="period-btn" type="button" id="photoCropReset">Đặt lại</button></div><div class="photo-crop-stage" id="photoCropViewport" aria-label="Kéo ảnh để căn vị trí"><img id="photoCropImage" alt="Xem trước ảnh đại diện" draggable="false"><span class="photo-crop-guide" aria-hidden="true"></span><span class="photo-crop-loading" id="photoCropLoading"><span class="spinner-border spinner-border-sm"></span> Đang chuẩn bị ảnh…</span></div><label class="photo-crop-zoom">Phóng to<input id="photoCropZoom" type="range" min="1" max="3" step="0.01" value="1"></label><div class="photo-crop-actions"><button class="period-btn" type="button" id="photoCropCancel">Hủy</button><button class="period-btn active" type="button" id="photoCropConfirm" disabled><i class="bi bi-check2 me-1"></i>Lưu ảnh</button></div></section>`);
+  const viewport = $("photoCropViewport");
+  const image = $("photoCropImage");
+  const zoom = $("photoCropZoom");
+  const crop = { studentId, viewport, image, objectUrl: URL.createObjectURL(file), naturalWidth: 0, naturalHeight: 0, viewportWidth: 0, viewportHeight: 0, baseScale: 1, scale: 1, x: 0, y: 0, zoom: 1, ready: false, onResize: null };
+  photoCropState = crop;
+  image.addEventListener("load", () => {
+    if (photoCropState !== crop) return;
+    crop.naturalWidth = image.naturalWidth;
+    crop.naturalHeight = image.naturalHeight;
+    crop.ready = Boolean(crop.naturalWidth && crop.naturalHeight);
+    if (!crop.ready) return;
+    syncPhotoCropViewport(crop);
+    $("photoCropLoading")?.classList.add("d-none");
+    $("photoCropConfirm").disabled = false;
+  });
+  image.addEventListener("error", () => {
+    if (photoCropState === crop) {
+      discardPhotoCropEditor();
+      alert("Không thể đọc tệp ảnh này.");
+    }
+  });
+  let pointer = null;
+  viewport.addEventListener("pointerdown", event => {
+    if (!crop.ready || (event.pointerType === "mouse" && event.button !== 0)) return;
+    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, imageX: crop.x, imageY: crop.y };
+    viewport.setPointerCapture?.(event.pointerId);
+    viewport.classList.add("is-dragging");
+    event.preventDefault();
+  });
+  viewport.addEventListener("pointermove", event => {
+    if (!pointer || event.pointerId !== pointer.id) return;
+    crop.x = pointer.imageX + event.clientX - pointer.x;
+    crop.y = pointer.imageY + event.clientY - pointer.y;
+    clampPhotoCrop(crop);
+    renderPhotoCrop(crop);
+  });
+  const finishPointer = event => {
+    if (!pointer || event.pointerId !== pointer.id) return;
+    viewport.releasePointerCapture?.(event.pointerId);
+    pointer = null;
+    viewport.classList.remove("is-dragging");
+  };
+  viewport.addEventListener("pointerup", finishPointer);
+  viewport.addEventListener("pointercancel", finishPointer);
+  zoom.addEventListener("input", () => { if (crop.ready) setPhotoCropZoom(crop, Number(zoom.value)); });
+  $("photoCropReset")?.addEventListener("click", () => {
+    crop.zoom = 1;
+    zoom.value = "1";
+    syncPhotoCropViewport(crop);
+  });
+  $("photoCropCancel")?.addEventListener("click", discardPhotoCropEditor);
+  $("photoCropConfirm")?.addEventListener("click", async event => {
+    if (!crop.ready || photoCropState !== crop) return;
+    const button = event.currentTarget;
+    const originalMarkup = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang lưu';
+    try {
+      const photo = await croppedPhotoBlob(crop);
+      await uploadCroppedPhoto(crop.studentId, photo);
+      discardPhotoCropEditor();
+      await loadClassData();
+      if (state.activeStudentId === crop.studentId) openStudent(crop.studentId);
+    } catch (error) {
+      alert(error.message || "Không thể lưu ảnh.");
+      if (photoCropState === crop) {
+        button.disabled = false;
+        button.innerHTML = originalMarkup;
+      }
+    }
+  });
+  crop.onResize = () => { if (photoCropState === crop && crop.ready) syncPhotoCropViewport(crop, true); };
+  window.addEventListener("resize", crop.onResize);
+  image.src = crop.objectUrl;
+}
 function openStudent(studentId) {
   const student = findStudent(studentId);
   if (!student) return;
+  discardPhotoCropEditor();
   state.activeStudentId = studentId;
   const score = leaderboardStudent(studentId); const total = studentScore(studentId);
   const groupLabel = studentGroupLabel(student);
@@ -663,7 +822,7 @@ function bindStudentDialog() {
   $("clearScoreOverrideBtn")?.addEventListener("click", () => clearScoreOverride(state.activeStudentId));
   $("resetScoreBtn")?.addEventListener("click", () => resetScoreToSchool(state.activeStudentId));
   $("saveStudentBtn")?.addEventListener("click", async () => { try { await api(`/admin/students/${state.activeStudentId}`, { method: "PATCH", body: JSON.stringify({ fullName: $("studentNameInput").value, schoolName: $("schoolNameInput").value }) }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
-  $("photoInput")?.addEventListener("change", async event => { const file = event.target.files[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) return alert("Ảnh không được vượt quá 5 MB."); const form = new FormData(); form.append("photo", file); try { await api(`/admin/students/${state.activeStudentId}/photo`, { method: "POST", body: form }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
+  $("photoInput")?.addEventListener("change", event => { const file = event.target.files[0]; event.target.value = ""; if (file) openPhotoCropEditor(file); });
   $("deletePhotoBtn")?.addEventListener("click", async () => { if (!confirm("Xóa ảnh của học sinh này?")) return; try { await api(`/admin/students/${state.activeStudentId}/photo`, { method: "DELETE" }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("deleteStudentBtn")?.addEventListener("click", async () => { const student = findStudent(state.activeStudentId); if (!student || !confirm(`Xóa ${student.fullName} khỏi danh sách lớp?`)) return; try { await api(`/admin/students/${state.activeStudentId}`, { method: "DELETE" }); $("studentDialog").close(); state.activeStudentId = null; await loadClassData(); } catch (error) { alert(error.message); } });
 }
@@ -687,6 +846,7 @@ $("closeAdminDialog").addEventListener("click", () => $("adminDialog").close());
 $("adminLogoutBtn").addEventListener("click", logoutAdmin);
 $("adminForm").addEventListener("submit", async event => { event.preventDefault(); const password = $("adminPassword").value; const error = $("adminError"); try { const session = await api("/admin/session", { method: "POST", body: JSON.stringify({ password }) }); state.adminToken = session.token; state.adminExpiresAt = Number(session.expiresAt) || 0; sessionStorage.setItem("11tin-admin-token", session.token); sessionStorage.setItem("11tin-admin-expires-at", String(state.adminExpiresAt)); $("adminDialog").close(); setAdminUI(); await loadClassData(); } catch (cause) { error.textContent = cause.message || "Không thể xác minh mật khẩu."; error.classList.remove("d-none"); } });
 $("adminDialog").addEventListener("close", () => { $("adminPassword").value = ""; });
+$("studentDialog").addEventListener("close", discardPhotoCropEditor);
 function closeDialogOnBackdrop(event) { if (event.target === event.currentTarget) event.currentTarget.close(); }
 [$("adminDialog"), $("studentDialog")].forEach(dialog => dialog.addEventListener("click", closeDialogOnBackdrop));
 
