@@ -678,7 +678,7 @@ async function resetScoreToSchool(studentId) {
   catch (error) { alert(error.message); }
 }
 
-const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const PHOTO_MAX_SOURCE_BYTES = 20 * 1024 * 1024;
 const PHOTO_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const PHOTO_OUTPUT_SIZE = 900;
@@ -747,14 +747,30 @@ async function croppedPhotoBlob(crop) {
   if (!photo || photo.size > PHOTO_MAX_UPLOAD_BYTES) throw new Error("Không thể nén ảnh xuống dưới 5 MB.");
   return photo;
 }
-async function uploadCroppedPhoto(studentId, photo) {
+async function uploadPhoto(studentId, photo, filename) {
   const form = new FormData();
-  form.append("photo", photo, "anh-dai-dien.webp");
+  form.append("photo", photo, filename);
   await api(`/admin/students/${studentId}/photo`, { method: "POST", body: form });
 }
+async function uploadAnimatedGif(file) {
+  const studentId = state.activeStudentId;
+  if (!studentId) return;
+  if (file.size > PHOTO_MAX_UPLOAD_BYTES) return alert("GIF động tối đa 5 MB để giữ nguyên hiệu ứng.");
+  const input = $("photoInput"); if (input) input.disabled = true;
+  try {
+    await uploadPhoto(studentId, file, "anh-dai-dien.gif");
+    await loadClassData();
+    if (state.activeStudentId === studentId) openStudent(studentId);
+  } catch (error) {
+    alert(error.message || "Không thể lưu GIF.");
+  } finally {
+    if ($("photoInput")) $("photoInput").disabled = false;
+  }
+}
 function openPhotoCropEditor(file) {
-  if (!PHOTO_TYPES.has(file.type)) return alert("Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.");
+  if (!PHOTO_TYPES.has(file.type)) return alert("Chỉ hỗ trợ ảnh JPEG, PNG, WebP hoặc GIF.");
   if (file.size > PHOTO_MAX_SOURCE_BYTES) return alert("Ảnh gốc không được vượt quá 20 MB.");
+  if (file.type === "image/gif") { void uploadAnimatedGif(file); return; }
   const actions = document.querySelector("#studentDialogContent .student-detail-actions");
   const studentId = state.activeStudentId;
   if (!actions || !studentId) return;
@@ -820,7 +836,7 @@ function openPhotoCropEditor(file) {
     button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang lưu';
     try {
       const photo = await croppedPhotoBlob(crop);
-      await uploadCroppedPhoto(crop.studentId, photo);
+      await uploadPhoto(crop.studentId, photo, "anh-dai-dien.webp");
       discardPhotoCropEditor();
       await loadClassData();
       if (state.activeStudentId === crop.studentId) openStudent(crop.studentId);
@@ -843,7 +859,7 @@ function openStudent(studentId) {
   state.activeStudentId = studentId;
   const score = leaderboardStudent(studentId); const total = studentScore(studentId);
   const groupLabel = studentGroupLabel(student);
-  const adminTools = isAdmin() ? `<section class="student-score-tools"><div><strong>Điểm thủ công</strong><small>Cộng/trừ là điều chỉnh riêng; ghi đè thay toàn bộ điểm hiển thị.</small></div><div class="student-score-tool-buttons"><button class="period-btn" type="button" id="manualPlusBtn"><i class="bi bi-plus-lg me-1"></i>Cộng điểm</button><button class="period-btn" type="button" id="manualMinusBtn"><i class="bi bi-dash-lg me-1"></i>Trừ điểm</button><button class="period-btn" type="button" id="setScoreOverrideBtn"><i class="bi bi-pencil-square me-1"></i>Ghi đè điểm</button>${score?.overrideTotal !== null && score?.overrideTotal !== undefined ? `<button class="period-btn" type="button" id="clearScoreOverrideBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ ghi đè</button>` : ""}<button class="period-btn danger-outline" type="button" id="resetScoreBtn"><i class="bi bi-arrow-repeat me-1"></i>Đặt lại theo trường</button></div></section><div class="student-detail-actions"><label>Họ và tên<input id="studentNameInput" value="${escapeHtml(student.fullName)}" maxlength="100"></label><label>Tên trên nguồn trường<input id="schoolNameInput" value="${escapeHtml(student.schoolName || student.fullName)}" maxlength="100"></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn"><i class="bi bi-image me-1"></i>Chọn ảnh<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
+  const adminTools = isAdmin() ? `<section class="student-score-tools"><div><strong>Điểm thủ công</strong><small>Cộng/trừ là điều chỉnh riêng; ghi đè thay toàn bộ điểm hiển thị.</small></div><div class="student-score-tool-buttons"><button class="period-btn" type="button" id="manualPlusBtn"><i class="bi bi-plus-lg me-1"></i>Cộng điểm</button><button class="period-btn" type="button" id="manualMinusBtn"><i class="bi bi-dash-lg me-1"></i>Trừ điểm</button><button class="period-btn" type="button" id="setScoreOverrideBtn"><i class="bi bi-pencil-square me-1"></i>Ghi đè điểm</button>${score?.overrideTotal !== null && score?.overrideTotal !== undefined ? `<button class="period-btn" type="button" id="clearScoreOverrideBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ ghi đè</button>` : ""}<button class="period-btn danger-outline" type="button" id="resetScoreBtn"><i class="bi bi-arrow-repeat me-1"></i>Đặt lại theo trường</button></div></section><div class="student-detail-actions"><label>Tên trên nguồn trường<input id="schoolNameInput" value="${escapeHtml(student.schoolName || student.fullName)}" maxlength="100"></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn" title="GIF được giữ nguyên hiệu ứng động"><i class="bi bi-image me-1"></i>Chọn ảnh/GIF<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
   $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p>${groupLabel ? `${escapeHtml(groupLabel)} · ` : ""}<strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></p>${scoreSummaryMarkup(score)}</div>${adminTools}</div>`;
   const dialog = $("studentDialog");
   if (!dialog.open) dialog.showModal();
@@ -857,7 +873,7 @@ function bindStudentDialog() {
   $("setScoreOverrideBtn")?.addEventListener("click", () => setScoreOverride(state.activeStudentId));
   $("clearScoreOverrideBtn")?.addEventListener("click", () => clearScoreOverride(state.activeStudentId));
   $("resetScoreBtn")?.addEventListener("click", () => resetScoreToSchool(state.activeStudentId));
-  $("saveStudentBtn")?.addEventListener("click", async () => { try { await api(`/admin/students/${state.activeStudentId}`, { method: "PATCH", body: JSON.stringify({ fullName: $("studentNameInput").value, schoolName: $("schoolNameInput").value }) }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
+  $("saveStudentBtn")?.addEventListener("click", async () => { try { await api(`/admin/students/${state.activeStudentId}`, { method: "PATCH", body: JSON.stringify({ schoolName: $("schoolNameInput").value }) }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("photoInput")?.addEventListener("change", event => { const file = event.target.files[0]; event.target.value = ""; if (file) openPhotoCropEditor(file); });
   $("deletePhotoBtn")?.addEventListener("click", async () => { if (!confirm("Xóa ảnh của học sinh này?")) return; try { await api(`/admin/students/${state.activeStudentId}/photo`, { method: "DELETE" }); await loadClassData(); openStudent(state.activeStudentId); } catch (error) { alert(error.message); } });
   $("deleteStudentBtn")?.addEventListener("click", async () => { const student = findStudent(state.activeStudentId); if (!student || !confirm(`Xóa ${student.fullName} khỏi danh sách lớp?`)) return; try { await api(`/admin/students/${state.activeStudentId}`, { method: "DELETE" }); $("studentDialog").close(); state.activeStudentId = null; await loadClassData(); } catch (error) { alert(error.message); } });

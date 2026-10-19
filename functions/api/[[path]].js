@@ -378,17 +378,15 @@ async function adminHandler(request, env, path) {
     const body = await request.json().catch(() => ({}));
     const student = await env.DB.prepare("SELECT id, full_name, school_name, group_no FROM students WHERE id = ?").bind(path[2]).first();
     if (!student) return fail("Không tìm thấy học sinh.", 404);
-    const hasName = Object.prototype.hasOwnProperty.call(body, "fullName");
     const hasGroup = Object.prototype.hasOwnProperty.call(body, "groupNo");
     const hasSchoolName = Object.prototype.hasOwnProperty.call(body, "schoolName");
-    if (!hasName && !hasGroup && !hasSchoolName) return fail("Chưa có thay đổi để lưu.");
-    const fullName = hasName ? String(body.fullName || "").trim().replace(/\s+/g, " ") : student.full_name;
-    if (fullName.length < 2 || fullName.length > 100) return fail("Họ và tên không hợp lệ.");
+    if (Object.prototype.hasOwnProperty.call(body, "fullName")) return fail("Tên học sinh là cố định.");
+    if (!hasGroup && !hasSchoolName) return fail("Chưa có thay đổi để lưu.");
     const schoolName = hasSchoolName ? String(body.schoolName || "").trim().replace(/\s+/g, " ") : (student.school_name || student.full_name);
     if (schoolName.length < 2 || schoolName.length > 100) return fail("Tên theo nguồn trường không hợp lệ.");
     const groupNo = hasGroup && (body.groupNo === null || body.groupNo === "") ? null : hasGroup ? Number(body.groupNo) : student.group_no;
     if (groupNo !== null && ![1, 2, 3, 4].includes(groupNo)) return fail("Tổ không hợp lệ.");
-    await env.DB.prepare("UPDATE students SET full_name = ?, school_name = ?, group_no = ? WHERE id = ?").bind(fullName, schoolName, groupNo, path[2]).run();
+    await env.DB.prepare("UPDATE students SET school_name = ?, group_no = ? WHERE id = ?").bind(schoolName, groupNo, path[2]).run();
     return json({ ok: true });
   }
 
@@ -412,9 +410,9 @@ async function adminHandler(request, env, path) {
     if (request.method === "POST") {
       const form = await request.formData();
       const photo = form.get("photo");
-      const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+      const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
       if (!photo || typeof photo === "string" || !allowedTypes.includes(photo.type) || photo.size > 5 * 1024 * 1024) {
-        return fail("Ảnh phải là JPEG, PNG hoặc WebP, tối đa 5 MB.");
+        return fail("Ảnh phải là JPEG, PNG, WebP hoặc GIF, tối đa 5 MB.");
       }
 
       const extension = photo.type.split("/")[1].replace("jpeg", "jpg");
