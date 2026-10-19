@@ -485,7 +485,10 @@ a{text-decoration:none;color:inherit}
 .table-custom tbody tr{transition:.22s ease}
 .table-custom tbody tr:hover{background:rgba(127,160,195,.045)}
 .table-custom tbody td.leaderboard-profile-cell{padding:0!important}
-.leaderboard-profile-trigger{min-height:64px;padding:10px 12px!important;border-radius:0!important}
+.table-custom tbody tr.leaderboard-profile-row{cursor:pointer}
+.table-custom tbody tr.leaderboard-profile-row:hover>td{background:rgba(0,127,187,.055)}
+.table-custom tbody tr.leaderboard-profile-row:focus-visible>td{box-shadow:inset 0 2px 0 var(--primary),inset 0 -2px 0 var(--primary)}
+.leaderboard-profile-trigger{min-height:64px;padding:10px 12px!important;border-radius:0!important;pointer-events:none}
 .person-cell{display:flex;align-items:center;gap:10px}
 .person-cell strong{display:block;color:var(--text);font-size:12px}
 .person-cell small{display:block;color:var(--muted);font-size:9px;margin-top:2px}

@@ -570,12 +570,29 @@ function studentSourceNote(student) {
   if (hasManualAdjustment(student.manualTotal)) pieces.push(`Điều chỉnh ${signedScore(student.manualTotal)}`);
   return student.overrideTotal !== null ? `Đang ghi đè · ${pieces.join(" · ")}` : pieces.join(" · ");
 }
+function leaderboardRowAttributes(student) {
+  const studentId = escapeHtml(student.id);
+  if (isAdmin()) return `data-profile-student-id="${studentId}"`;
+  return `data-profile-student-id="${studentId}" tabindex="0" role="button" aria-label="Xem hồ sơ ${escapeHtml(student.fullName)}"`;
+}
 function renderLeaderboard() {
   const term = normalizeSearchText($("studentSearch").value.trim());
   const rows = state.leaderboard.filter(student => normalizeSearchText(student.fullName).includes(term)).slice().sort((left, right) => compareLeaderboardStudents(left, right, state.individualSort));
   $("leaderboardInfo").textContent = individualSourceText();
-  $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr><td class="leaderboard-profile-cell"><button class="student-chip leaderboard-profile-trigger" data-student-id="${student.id}">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo} · ` : ""}${escapeHtml(studentSourceNote(student))}</small></span></button></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${scoreClass(student.total)}">${signedScore(student.total)}</strong>${student.overrideTotal !== null ? '<small class="score-value-note">Ghi đè</small>' : ""}</td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="4">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
-  document.querySelectorAll("#leaderboardRows [data-student-id]").forEach(item => item.addEventListener("click", event => { const button = event.target.closest("[data-student-id]"); if (!button) return; if (button.dataset.score) { changeScore(button.dataset.studentId, button.dataset.score === "plus" ? 1 : -1); } else openStudent(button.dataset.studentId); }));
+  $("leaderboardRows").innerHTML = rows.length ? rows.map(student => `<tr class="leaderboard-profile-row" ${leaderboardRowAttributes(student)}><td class="leaderboard-profile-cell"><div class="student-chip leaderboard-profile-trigger">${photoMarkup(student)}<span class="student-chip-text"><strong>${escapeHtml(student.fullName)}</strong><small>${student.groupNo ? `Tổ ${student.groupNo} · ` : ""}${escapeHtml(studentSourceNote(student))}</small></span></div></td><td>${student.groupNo ? `Tổ ${student.groupNo}` : "—"}</td><td class="text-end"><strong class="${scoreClass(student.total)}">${signedScore(student.total)}</strong>${student.overrideTotal !== null ? '<small class="score-value-note">Ghi đè</small>' : ""}</td><td class="admin-only ${isAdmin() ? "" : "d-none"} text-end"><button class="score-button plus" data-score="plus" data-student-id="${student.id}" aria-label="Cộng điểm">+</button><button class="score-button minus ms-1" data-score="minus" data-student-id="${student.id}" aria-label="Trừ điểm">−</button></td></tr>`).join("") : `<tr><td colspan="4">${emptyState("Không tìm thấy học sinh phù hợp.")}</td></tr>`;
+  const leaderboardRows = $("leaderboardRows");
+  leaderboardRows.onclick = event => {
+    const scoreButton = event.target.closest("[data-score][data-student-id]");
+    if (scoreButton) return changeScore(scoreButton.dataset.studentId, scoreButton.dataset.score === "plus" ? 1 : -1);
+    const row = event.target.closest("[data-profile-student-id]");
+    if (row) openStudent(row.dataset.profileStudentId);
+  };
+  leaderboardRows.onkeydown = event => {
+    const row = event.target.closest("[data-profile-student-id]");
+    if (!row || event.target !== row || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    openStudent(row.dataset.profileStudentId);
+  };
 }
 $("studentSearch").addEventListener("input", renderLeaderboard);
 function setLeaderboardSortMenuOpen(open) {
