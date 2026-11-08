@@ -629,12 +629,6 @@ function formatEventTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(date);
 }
-function schoolHistoryMarkup(studentId) {
-  if (!schoolRecordsAvailable()) return `<div class="score-history-empty">${state.schoolRecordsState === "error" ? "Không thể tải điểm từ trường." : "Đang tải điểm từ trường…"}</div>`;
-  const events = state.schoolEventsByStudent.get(studentId) || [];
-  if (!events.length) return `<div class="score-history-empty">Chưa có bản ghi cá nhân từ trường.</div>`;
-  return events.map(event => `<div class="score-event school-event"><div><strong class="${scoreClass(event.diem)}">${signedScore(event.diem)}</strong><span>${escapeHtml(event.tenLoi || "Sự kiện thi đua")}</span><small>${escapeHtml(event.ngay || "—")}${event.tuan ? ` · Tuần ${escapeHtml(event.tuan)}` : ""}${event.ghiChu ? ` · ${escapeHtml(event.ghiChu)}` : ""}</small></div></div>`).join("");
-}
 function manualHistoryMarkup(events) {
   if (!events.length) return `<div class="score-history-empty">Chưa có điều chỉnh thủ công.</div>`;
   return events.map(event => `<div class="score-event"><div><strong class="${scoreClass(event.delta)}">${signedScore(event.delta)}</strong><span>${escapeHtml(event.reason || "Không ghi nội dung")}</span><small>${formatEventTime(event.createdAt)}</small></div><button class="remove-score-event" type="button" data-delete-score-id="${event.id}" aria-label="Xóa lượt điểm"><i class="bi bi-trash3"></i></button></div>`).join("");
@@ -643,7 +637,7 @@ function renderScoreHistory(events, student, override) {
   const container = $("studentScoreHistory");
   if (!container) return;
   const overrideNotice = override ? `<div class="score-override-notice"><i class="bi bi-pencil-square"></i><span>Đang ghi đè: <strong class="${scoreClass(override.finalScore)}">${signedScore(override.finalScore)}</strong>${override.reason ? ` · ${escapeHtml(override.reason)}` : ""}</span></div>` : "";
-  container.innerHTML = `<section class="score-history-section"><div class="history-heading"><strong>Điểm từ trường</strong><small>Đồng bộ từ nhật ký công khai</small></div>${schoolHistoryMarkup(student.id)}</section><section class="score-history-section"><div class="history-heading"><strong>Điều chỉnh thủ công</strong><small>Có thể xóa từng lượt nếu nhập nhầm.</small></div>${overrideNotice}${manualHistoryMarkup(events)}</section>`;
+  container.innerHTML = `<section class="score-history-section"><div class="history-heading"><strong>Điều chỉnh thủ công</strong><small>Có thể xóa từng lượt nếu nhập nhầm.</small></div>${overrideNotice}${manualHistoryMarkup(events)}</section>`;
   container.querySelectorAll("[data-delete-score-id]").forEach(button => button.addEventListener("click", async () => {
     if (!confirm("Xóa lượt điểm này?")) return;
     try {
@@ -676,20 +670,22 @@ function scoreSummaryMarkup(score) {
   const manualScore = hasManualAdjustment(score.manualTotal) ? `<span><small>Điều chỉnh</small><strong class="${scoreClass(score.manualTotal)}">${signedScore(score.manualTotal)}</strong></span>` : "";
   return `<div class="student-score-summary${score.overrideTotal !== null ? " is-overridden" : ""}"><span><small>Điểm</small>${sourceScore}</span>${manualScore}${score.overrideTotal !== null ? `<span><small>Điểm ghi đè</small><strong class="${scoreClass(score.overrideTotal)}">${signedScore(score.overrideTotal)}</strong></span>` : ""}</div>${sourceNote}`;
 }
-function schoolDeductionEvents(studentId) {
+function schoolCompetitionEvents(studentId) {
   if (!schoolRecordsAvailable()) return [];
   return (state.schoolEventsByStudent.get(studentId) || []).filter(event => {
     const score = Number(event.diem);
-    return Number.isFinite(score) && score < 0;
+    return Number.isFinite(score) && score !== 0;
   });
 }
-function schoolDeductionMarkup(studentId) {
-  const events = schoolDeductionEvents(studentId);
+function schoolCompetitionMarkup(studentId) {
+  const events = schoolCompetitionEvents(studentId);
   if (!events.length) return "";
   const total = events.reduce((sum, event) => sum + Number(event.diem), 0);
-  return `<section class="student-deduction-details"><div class="student-deduction-note"><i class="bi bi-dash-circle-fill"></i><span>Chi tiết điểm trừ</span><strong class="negative">${signedScore(total)} điểm</strong></div><div class="deduction-events">${events.map(event => {
+  return `<section class="student-competition-details"><div class="student-competition-note"><i class="bi bi-journal-check"></i><span>Chi tiết thi đua</span><strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></div><div class="competition-events">${events.map(event => {
+    const score = Number(event.diem);
+    const positive = score > 0;
     const meta = [event.ngay, event.tuan ? `Tuần ${event.tuan}` : ""].filter(Boolean).map(value => escapeHtml(value)).join(" · ");
-    return `<article class="deduction-event"><strong class="deduction-event-points negative">${signedScore(event.diem)} điểm</strong><div><strong class="deduction-event-reason">${escapeHtml(event.tenLoi || "Không có lý do trên nguồn trường")}</strong>${meta ? `<small class="deduction-event-meta">${meta}</small>` : ""}${event.ghiChu ? `<p class="deduction-event-note">${escapeHtml(event.ghiChu)}</p>` : ""}</div></article>`;
+    return `<article class="competition-event ${positive ? "is-positive" : "is-negative"}"><div class="competition-event-score"><strong class="${scoreClass(score)}">${signedScore(score)} điểm</strong><small>${positive ? "Cộng điểm" : "Trừ điểm"}</small></div><div><strong class="competition-event-reason">${escapeHtml(event.tenLoi || "Không có nội dung trên nguồn trường")}</strong>${meta ? `<small class="competition-event-meta">${meta}</small>` : ""}${event.ghiChu ? `<p class="competition-event-note">${escapeHtml(event.ghiChu)}</p>` : ""}</div></article>`;
   }).join("")}</div></section>`;
 }
 async function setScoreOverride(studentId) {
@@ -892,7 +888,7 @@ function openStudent(studentId) {
   state.activeStudentId = studentId;
   const score = leaderboardStudent(studentId); const total = studentScore(studentId);
   const adminTools = isAdmin() ? `<section class="student-score-tools"><div><strong>Điểm thủ công</strong><small>Cộng/trừ là điều chỉnh riêng; ghi đè thay toàn bộ điểm hiển thị.</small></div><div class="student-score-tool-buttons"><button class="period-btn" type="button" id="manualPlusBtn"><i class="bi bi-plus-lg me-1"></i>Cộng điểm</button><button class="period-btn" type="button" id="manualMinusBtn"><i class="bi bi-dash-lg me-1"></i>Trừ điểm</button><button class="period-btn" type="button" id="setScoreOverrideBtn"><i class="bi bi-pencil-square me-1"></i>Ghi đè điểm</button>${score?.overrideTotal !== null && score?.overrideTotal !== undefined ? `<button class="period-btn" type="button" id="clearScoreOverrideBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Bỏ ghi đè</button>` : ""}<button class="period-btn danger-outline" type="button" id="resetScoreBtn"><i class="bi bi-arrow-repeat me-1"></i>Đặt lại theo trường</button></div></section><div class="student-detail-actions"><label>Tên trên nguồn trường<input id="schoolNameInput" value="${escapeHtml(student.schoolName || student.fullName)}" maxlength="100"></label><button class="period-btn" type="button" id="saveStudentBtn"><i class="bi bi-check2 me-1"></i>Lưu hồ sơ</button><label class="period-btn" title="GIF được giữ nguyên hiệu ứng động"><i class="bi bi-image me-1"></i>Chọn ảnh/GIF<input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden></label>${student.photoUrl ? `<button class="period-btn" type="button" id="deletePhotoBtn"><i class="bi bi-trash3 me-1"></i>Xóa ảnh</button>` : ""}<button class="period-btn danger-outline" type="button" id="deleteStudentBtn"><i class="bi bi-person-x-fill me-1"></i>Xóa học sinh</button></div><section class="student-score-history-wrap"><div id="studentScoreHistory"><div class="score-history-empty"><span class="spinner-border spinner-border-sm"></span> Đang tải lịch sử điểm…</div></div></section>` : "";
-  $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p><strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></p>${scoreSummaryMarkup(score)}${schoolDeductionMarkup(studentId)}</div>${adminTools}</div>`;
+  $("studentDialogContent").innerHTML = `<div class="student-detail">${photoMarkup(student)}<div><div class="panel-kicker">HỌC SINH 11 TIN</div><h2>${escapeHtml(student.fullName)}</h2><p><strong class="${scoreClass(total)}">${signedScore(total)} điểm</strong></p>${scoreSummaryMarkup(score)}${schoolCompetitionMarkup(studentId)}</div>${adminTools}</div>`;
   const dialog = $("studentDialog");
   if (!dialog.open) dialog.showModal();
   bindStudentDialog();
